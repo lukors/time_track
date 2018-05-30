@@ -7,10 +7,7 @@ extern crate serde_json;
 extern crate chrono;
 
 use chrono::prelude::*;
-use std::{
-    path::Path,
-    io,
-};
+use std::{io, path::Path};
 
 #[cfg(test)]
 mod tests {
@@ -18,10 +15,10 @@ mod tests {
 
     #[test]
     fn add_event() {
-        let event = Event{
+        let event = Event {
             time: UnixTime::from_timestamp(Utc::now().timestamp()),
             description: "This is a description".to_string(),
-            tag_ids: vec!(),
+            tag_ids: vec![],
         };
 
         let mut event_db = EventDB::new();
@@ -35,8 +32,8 @@ mod tests {
         let file_name = "write_test.txt";
         let event_db = EventDB::new();
         // TODO: Add some things to the DB that can be written.
-        
-        //assert!(super::write_db(event_db, Path::new(file_name)).is_ok());
+
+        assert!(super::write_db(event_db, Path::new(file_name)).is_ok());
     }
 
     // TODO: Test for reading DB
@@ -45,9 +42,9 @@ mod tests {
     //     let file_name = "write_test.txt";
     //     let event_db = EventDB::new();
     //     let target_contents = "whatever should be in the file";
-        
+
     //     super::write_db(event_db, file_name);
-        
+
     //     // TODO: Read the file into a variable to be compared in the assert_eq.
     //     // let written_contents = file.read(file_name);
 
@@ -60,9 +57,9 @@ mod tests {
     //     let file_name = "write_test.txt";
     //     let event_db = EventDB::new();
     //     let target_contents = "whatever should be in the file";
-        
+
     //     super::write_db(event_db, file_name);
-        
+
     //     // TODO: Read the file into a variable to be compared in the assert_eq.
     //     // let written_contents = file.read(file_name);
 
@@ -77,9 +74,7 @@ struct UnixTime {
 
 impl UnixTime {
     fn from_timestamp(secs: i64) -> UnixTime {
-        UnixTime{
-            time: secs,
-        }
+        UnixTime { time: secs }
     }
 }
 
@@ -97,12 +92,8 @@ struct EventDB {
 
 impl EventDB {
     fn new() -> EventDB {
-        EventDB{
-            events: vec!(),
-        }
+        EventDB { events: vec![] }
     }
 }
 
-// fn write_db(event_db: EventDB, path: &Path) -> io::Result<()> {
-
-// }
+fn write_db(event_db: EventDB, path: &Path) -> io::Result<()> {}
