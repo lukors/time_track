@@ -1,5 +1,5 @@
 
-/test_files/write_test.txt
+/test_files/write_test.json
 /target
 **/*.rs.bk
 Cargo.lock
