@@ -1,7 +1,7 @@
 
-/test_files/write_test.json
 /target
 **/*.rs.bk
 Cargo.lock
 *.sublime-project
 *.sublime-workspace
+/test_files/read_write_test.json
