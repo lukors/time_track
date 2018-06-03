@@ -19,7 +19,7 @@ struct Event {
     tag_ids: Vec<usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct EventDB {
     events: BTreeMap<i64, Event>,
 }
@@ -39,9 +39,11 @@ fn write_db(event_db: &EventDB, path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-// fn read_db(path: &Path) -> io::Result<EventDB> {
-//     serde_json::
-// }
+fn read_db(path: &Path) -> io::Result<EventDB> {
+    let file = File::open(path)?;
+    let event_db = serde_json::from_reader(file)?;
+    Ok(event_db)
+}
 
 #[cfg(test)]
 mod tests {
@@ -49,7 +51,7 @@ mod tests {
 
     #[test]
     fn write_read_db() {
-        let file_name = "test_files/read_write_test.json";
+        let file_name = Path::new("test_files/read_write_test.json");
         let mut event_db = EventDB::new();
         
         let time_now = Utc::now().timestamp();
@@ -83,10 +85,10 @@ mod tests {
             tag_ids,
         });
 
-        assert!(super::write_db(&event_db, Path::new(file_name)).is_ok());
+        assert!(super::write_db(&event_db, &file_name).is_ok());
 
         
-        // let event_db_read = super::read_db(file_name);
-        // assert_eq!(event_db, event_db_read);
+        let event_db_read = super::read_db(&file_name).unwrap();
+        assert_eq!(event_db, event_db_read);
     }
 }
