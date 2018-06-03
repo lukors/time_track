@@ -7,7 +7,9 @@ extern crate serde_json;
 extern crate chrono;
 
 use chrono::prelude::*;
-use std::{io, path::Path};
+use std::{fs::File,
+          io::{self, prelude::*},
+          path::Path};
 
 #[cfg(test)]
 mod tests {
@@ -29,11 +31,29 @@ mod tests {
 
     #[test]
     fn write_db() {
-        let file_name = "write_test.txt";
-        let event_db = EventDB::new();
+        let file_name = "target/test_files/write_test.txt";
+        let mut event_db = EventDB::new();
         // TODO: Add some things to the DB that can be written.
+        let time_now = Utc::now().timestamp();
+        event_db.events.push(Event {
+            time: UnixTime { time: time_now },
+            description: "write one, should be over-written due to exact same time".to_string(),
+            tag_ids: vec![2, 1, 4],
+        });
+        event_db.events.push(Event {
+            time: UnixTime { time: time_now },
+            description:
+                "write two, should be visible since it has the exact same time as previous write"
+                    .to_string(),
+            tag_ids: vec![2, 1, 4],
+        });
+        event_db.events.push(Event {
+            time: UnixTime { time: time_now + 1 },
+            description: "one second later".to_string(),
+            tag_ids: vec![2, 1, 4],
+        });
 
-        assert!(super::write_db(event_db, Path::new(file_name)).is_ok());
+        assert!(super::write_db(&event_db, Path::new(file_name)).is_ok());
     }
 
     // TODO: Test for reading DB
@@ -67,7 +87,7 @@ mod tests {
     // }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 struct UnixTime {
     time: i64,
 }
@@ -96,4 +116,11 @@ impl EventDB {
     }
 }
 
-fn write_db(event_db: EventDB, path: &Path) -> io::Result<()> {}
+fn write_db(event_db: &EventDB, path: &Path) -> io::Result<()> {
+    let file = File::create(path)?;
+    for event in &event_db.events {
+        serde_json::to_writer_pretty(&file, &event)?;
+    }
+    // file.write_all(serialized)?;
+    Ok(())
+}
