@@ -1,4 +1,5 @@
 
+/test_files/write_test.txt
 /target
 **/*.rs.bk
 Cargo.lock
