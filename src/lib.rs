@@ -7,34 +7,62 @@ extern crate serde_json;
 extern crate chrono;
 
 use chrono::prelude::*;
-use std::{
-    collections::BTreeMap,
-    fs::File,
-    io::{self, prelude::*},
-    path::Path};
+use std::{collections::{BTreeMap, HashMap},
+          fs::File,
+          io::{self, prelude::*},
+          path::Path};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Event {
     description: String,
-    tag_ids: Vec<usize>,
+    tag_ids: Vec<u16>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct EventDB {
+    tags: HashMap<u16, Tag>,
     events: BTreeMap<i64, Event>,
 }
 
 impl EventDB {
     fn new() -> EventDB {
-        EventDB { events: BTreeMap::new() }
+        EventDB {
+            tags: HashMap::new(),
+            events: BTreeMap::new(),
+        }
     }
+
+    fn add_event(&mut self, time: i64, mut event: Event) -> Result<(), &str> {
+        for tag in &event.tag_ids {
+            if !self.tags.contains_key(tag) {
+                return Err("The event contains a tag that does not exist")
+            }
+        }
+
+        event.tag_ids.sort();
+        event.tag_ids.dedup();
+
+        self.events.insert(time, event);
+        Ok(())
+    }
+
+    fn remove_event(&mut self, time: i64) -> Option<Event> {
+        self.events.remove(&time)
+    }
+
+    // fn add_tag(&mut self, long_name: &str, short_name: &str) -> Result<u16, &str> {
+        
+    // }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+struct Tag {
+    long_name: String,
+    short_name: String,
 }
 
 fn write_db(event_db: &EventDB, path: &Path) -> io::Result<()> {
     let file = File::create(path)?;
-    // for (time, event) in &event_db.events {
-    //     let to_write = (time, &event.description, &event.tag_ids);
-    // }
     serde_json::to_writer_pretty(&file, &event_db)?;
     Ok(())
 }
@@ -50,44 +78,48 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Creates a simple database, writes it to a file, loads the written file
+    /// and checks that the contents are the same as the original data.
     fn write_read_db() {
         let file_name = Path::new("test_files/read_write_test.json");
         let mut event_db = EventDB::new();
-        
+
         let time_now = Utc::now().timestamp();
-        let description = "This event should not exist".to_string();
-        let tag_ids = vec![2, 1, 4];
-        
-        event_db.events.insert(
-            time_now,
-            Event {
-            description,
-            tag_ids,
-        });
 
-        let description = "This is a description".to_string();
-        let tag_ids = vec![3, 1, 1];
-        
-        event_db.events.insert(
-            time_now + 1,
-            Event {
-            description,
-            tag_ids,
-        });
+        // Adding tags because they need to exist.
+        event_db.tags.insert(0, Tag{long_name: "Zeroeth".to_string(), short_name: "zro".to_string()});
+        event_db.tags.insert(1, Tag{long_name: "First".to_string(), short_name: "frs".to_string()});
+        event_db.tags.insert(2, Tag{long_name: "Second".to_string(), short_name: "scn".to_string()});
 
-        let description = "This event should exist".to_string();
-        let tag_ids = vec![];
-        
-        event_db.events.insert(
-            time_now,
-            Event {
-            description,
-            tag_ids,
-        });
+        event_db.add_event(time_now, Event {
+                description: "This event should be overwritten".to_string(),
+                tag_ids: vec![0, 1, 2],
+            },
+        ).unwrap();
+
+        // Overwriting an existing event.
+        event_db.add_event(time_now, Event {
+                description: "This event should exist".to_string(),
+                tag_ids: vec![0, 1, 1],
+            },
+        ).unwrap();
+
+        event_db.add_event(time_now + 1, Event {
+                description: "This is a description".to_string(),
+                tag_ids: vec![2],
+            },
+        ).unwrap();
+
+        // Adding and then removing an event.
+        event_db.add_event(time_now + 2, Event {
+                description: "This event should be removed".to_string(),
+                tag_ids: vec![],
+            },
+        ).unwrap();
+        event_db.remove_event(time_now + 2);
 
         assert!(super::write_db(&event_db, &file_name).is_ok());
 
-        
         let event_db_read = super::read_db(&file_name).unwrap();
         assert_eq!(event_db, event_db_read);
     }
