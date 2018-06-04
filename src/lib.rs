@@ -35,7 +35,7 @@ impl EventDB {
     fn add_event(&mut self, time: i64, mut event: Event) -> Result<(), &str> {
         for tag in &event.tag_ids {
             if !self.tags.contains_key(tag) {
-                return Err("The event contains a tag that does not exist.")
+                return Err("The event contains a tag that does not exist")
             }
         }
 
@@ -52,10 +52,15 @@ impl EventDB {
 
     fn add_tag(&mut self, mut tag: Tag) -> Result<(), &str> {
         if tag.short_name.is_empty() {
-            return Err("You need to have a short name for the tag.")
+            return Err("You need to have a short name for the tag")
         }
         if tag.long_name.is_empty() {
-            return Err("You need to have a long name for the tag.")
+            return Err("You need to have a long name for the tag")
+        }
+        for existing_tag in self.tags.values() {
+            if existing_tag.short_name == tag.short_name{
+                return Err("A tag with this short name already exists")
+            }
         }
 
         for number in 0.. {
@@ -67,6 +72,8 @@ impl EventDB {
 
         Ok(())
     }
+
+    // fn remove_tag(&mut self, )
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -103,6 +110,9 @@ mod tests {
         event_db.add_tag(Tag{long_name: "Zeroeth".to_string(), short_name: "zro".to_string()}).unwrap();
         event_db.add_tag(Tag{long_name: "First".to_string(), short_name: "frs".to_string()}).unwrap();
         event_db.add_tag(Tag{long_name: "Second".to_string(), short_name: "scn".to_string()}).unwrap();
+        
+        // Adding a tag with a short name that already exists should not work.
+        assert!(event_db.add_tag(Tag{long_name: "Duplicate".to_string(), short_name: "scn".to_string()}).is_err());
 
         event_db.add_event(time_now, Event {
                 description: "This event should be overwritten".to_string(),
