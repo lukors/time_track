@@ -58,7 +58,6 @@ impl EventDB {
             return Err("You need to have a long name for the tag.")
         }
 
-        tag.short_name = tag.short_name.to_lowercase();
         for number in 0.. {
             if !self.tags.contains_key(&number) {
                 self.tags.insert(number, tag);
