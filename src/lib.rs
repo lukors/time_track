@@ -35,7 +35,7 @@ impl EventDB {
     fn add_event(&mut self, time: i64, mut event: Event) -> Result<(), &str> {
         for tag in &event.tag_ids {
             if !self.tags.contains_key(tag) {
-                return Err("The event contains a tag that does not exist")
+                return Err("The event contains a tag that does not exist");
             }
         }
 
@@ -52,14 +52,14 @@ impl EventDB {
 
     fn add_tag(&mut self, mut tag: Tag) -> Result<(), &str> {
         if tag.short_name.is_empty() {
-            return Err("You need to have a short name for the tag")
+            return Err("You need to have a short name for the tag");
         }
         if tag.long_name.is_empty() {
-            return Err("You need to have a long name for the tag")
+            return Err("You need to have a long name for the tag");
         }
         for existing_tag in self.tags.values() {
-            if existing_tag.short_name == tag.short_name{
-                return Err("A tag with this short name already exists")
+            if existing_tag.short_name == tag.short_name {
+                return Err("A tag with this short name already exists");
             }
         }
 
@@ -73,7 +73,25 @@ impl EventDB {
         Ok(())
     }
 
-    // fn remove_tag(&mut self, )
+    fn remove_tag(&mut self, short_name: String) -> Result<(), &str> {
+        // TODO: Remove the tag from all events it occurrs in before removing
+        // it from the list.
+
+        let to_remove: Vec<u16> = self.tags
+            .iter()
+            .filter(|&(_, ref val)| val.short_name == short_name)
+            .map(|(key, _)| key.clone())
+            .collect();
+
+        if to_remove.is_empty() {
+            return Err("That short name does not exist");
+        }
+
+        for key in to_remove {
+            self.tags.remove(&key);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -107,38 +125,84 @@ mod tests {
 
         let time_now = Utc::now().timestamp();
 
-        event_db.add_tag(Tag{long_name: "Zeroeth".to_string(), short_name: "zro".to_string()}).unwrap();
-        event_db.add_tag(Tag{long_name: "First".to_string(), short_name: "frs".to_string()}).unwrap();
-        event_db.add_tag(Tag{long_name: "Second".to_string(), short_name: "scn".to_string()}).unwrap();
-        
-        // Adding a tag with a short name that already exists should not work.
-        assert!(event_db.add_tag(Tag{long_name: "Duplicate".to_string(), short_name: "scn".to_string()}).is_err());
+        event_db
+            .add_tag(Tag {
+                long_name: "Zeroeth".to_string(),
+                short_name: "zro".to_string(),
+            })
+            .unwrap();
+        event_db
+            .add_tag(Tag {
+                long_name: "First".to_string(),
+                short_name: "frs".to_string(),
+            })
+            .unwrap();
+        event_db
+            .add_tag(Tag {
+                long_name: "Second".to_string(),
+                short_name: "scn".to_string(),
+            })
+            .unwrap();
 
-        event_db.add_event(time_now, Event {
-                description: "This event should be overwritten".to_string(),
-                tag_ids: vec![0, 1, 2],
-            },
-        ).unwrap();
+        // Adding a tag with a short name that already exists should not work.
+        assert!(
+            event_db
+                .add_tag(Tag {
+                    long_name: "Duplicate".to_string(),
+                    short_name: "scn".to_string()
+                })
+                .is_err(),
+            "Adding a duplicate tag didn't fail, but it should"
+        );
+
+        // Removing a tag should work.
+        event_db.add_tag(Tag {
+            long_name: "Remove this".to_string(),
+            short_name: "rmv".to_string(),
+        });
+        assert!(event_db.remove_tag("rmv".to_string()).is_ok(), "Could not remove a tag");
+
+        event_db
+            .add_event(
+                time_now,
+                Event {
+                    description: "This event should be overwritten".to_string(),
+                    tag_ids: vec![0, 1, 2],
+                },
+            )
+            .unwrap();
 
         // Overwriting an existing event.
-        event_db.add_event(time_now, Event {
-                description: "This event should exist".to_string(),
-                tag_ids: vec![0, 1, 1],
-            },
-        ).unwrap();
+        event_db
+            .add_event(
+                time_now,
+                Event {
+                    description: "This event should exist".to_string(),
+                    tag_ids: vec![0, 1, 1],
+                },
+            )
+            .unwrap();
 
-        event_db.add_event(time_now + 1, Event {
-                description: "This is a description".to_string(),
-                tag_ids: vec![2],
-            },
-        ).unwrap();
+        event_db
+            .add_event(
+                time_now + 1,
+                Event {
+                    description: "This is a description".to_string(),
+                    tag_ids: vec![2],
+                },
+            )
+            .unwrap();
 
         // Adding and then removing an event.
-        event_db.add_event(time_now + 2, Event {
-                description: "This event should be removed".to_string(),
-                tag_ids: vec![],
-            },
-        ).unwrap();
+        event_db
+            .add_event(
+                time_now + 2,
+                Event {
+                    description: "This event should be removed".to_string(),
+                    tag_ids: vec![],
+                },
+            )
+            .unwrap();
         event_db.remove_event(time_now + 2);
 
         assert!(super::write_db(&event_db, &file_name).is_ok());
