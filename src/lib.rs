@@ -21,7 +21,7 @@ pub struct Event {
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct EventDB {
     tags: HashMap<u16, Tag>,
-    events: BTreeMap<i64, Event>,
+    pub events: BTreeMap<i64, Event>,
 }
 
 impl EventDB {
@@ -66,7 +66,7 @@ impl EventDB {
         time: i64,
         description: &str,
         short_names: &[&str],
-    ) -> Result<(), &str> {
+    ) -> Result<(), String> {
         let mut short_names = short_names.to_vec();
         short_names.sort();
         short_names.dedup();
@@ -79,10 +79,10 @@ impl EventDB {
 
             let invalid_short_names: Vec<_> = short_names
                 .iter()
-                .filter(|sn| existing_short_names.contains(&sn.to_string()))
+                .filter(|sn| !existing_short_names.contains(&sn.to_string()))
                 .collect();
             if !invalid_short_names.is_empty() {
-                return Err("Event contains at least one invalid short name (Tag)");
+                return Err(format!("Event contains invalid short names: {:?}", invalid_short_names));
             }
         }
 
@@ -110,22 +110,25 @@ impl EventDB {
         self.events.remove(&time)
     }
 
-    pub fn add_tag(&mut self, mut tag: Tag) -> Result<(), &str> {
-        if tag.short_name.is_empty() {
+    pub fn add_tag(&mut self, long_name: &str, short_name: &str) -> Result<(), &str> {
+        let short_name = short_name.to_string();
+        let long_name = long_name.to_string();
+
+        if short_name.is_empty() {
             return Err("You need to have a short name for the tag");
         }
-        if tag.long_name.is_empty() {
+        if long_name.is_empty() {
             return Err("You need to have a long name for the tag");
         }
         for existing_tag in self.tags.values() {
-            if existing_tag.short_name == tag.short_name {
+            if existing_tag.short_name == short_name {
                 return Err("A tag with this short name already exists");
             }
         }
 
         for number in 0.. {
             if !self.tags.contains_key(&number) {
-                self.tags.insert(number, tag);
+                self.tags.insert(number, Tag{short_name, long_name});
                 break;
             }
         }
@@ -174,40 +177,25 @@ mod tests {
         let time_now = Utc::now().timestamp();
 
         event_db
-            .add_tag(Tag {
-                long_name: "Zeroeth".to_string(),
-                short_name: "zro".to_string(),
-            })
+            .add_tag("Zeroeth", "zro")
             .unwrap();
         event_db
-            .add_tag(Tag {
-                long_name: "First".to_string(),
-                short_name: "frs".to_string(),
-            })
+            .add_tag("First", "frs")
             .unwrap();
         event_db
-            .add_tag(Tag {
-                long_name: "Second".to_string(),
-                short_name: "scn".to_string(),
-            })
+            .add_tag("Second", "scn")
             .unwrap();
 
         // Adding a tag with a short name that already exists should not work.
         assert!(
             event_db
-                .add_tag(Tag {
-                    long_name: "Duplicate".to_string(),
-                    short_name: "scn".to_string()
-                })
+                .add_tag("Duplicate", "scn")
                 .is_err(),
             "Adding a duplicate tag didn't fail, but it should"
         );
 
         // Removing a tag should work.
-        event_db.add_tag(Tag {
-            long_name: "Remove this".to_string(),
-            short_name: "rmv".to_string(),
-        });
+        event_db.add_tag("Remove this", "rmv");
         assert!(
             event_db.remove_tag("rmv".to_string()).is_ok(),
             "Could not remove a tag"
