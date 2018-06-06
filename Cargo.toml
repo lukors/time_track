@@ -1,5 +1,5 @@
 [package]
-name = "timetrack"
+name = "time_track"
 version = "0.1.0"
 authors = ["Lukas Orsvärn <lukas@orsvarn.com>"]
 
