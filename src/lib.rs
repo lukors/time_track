@@ -82,7 +82,10 @@ impl EventDB {
                 .filter(|sn| !existing_short_names.contains(&sn.to_string()))
                 .collect();
             if !invalid_short_names.is_empty() {
-                return Err(format!("Event contains invalid short names: {:?}", invalid_short_names));
+                return Err(format!(
+                    "Event contains invalid short names: {:?}",
+                    invalid_short_names
+                ));
             }
         }
 
@@ -110,6 +113,10 @@ impl EventDB {
         self.events.remove(&time)
     }
 
+    pub fn get_event(&self, time: i64) -> Option<&Event> {
+        self.events.get(&time)
+    }
+
     pub fn add_tag(&mut self, long_name: &str, short_name: &str) -> Result<(), &str> {
         let short_name = short_name.to_string();
         let long_name = long_name.to_string();
@@ -128,7 +135,13 @@ impl EventDB {
 
         for number in 0.. {
             if !self.tags.contains_key(&number) {
-                self.tags.insert(number, Tag{short_name, long_name});
+                self.tags.insert(
+                    number,
+                    Tag {
+                        short_name,
+                        long_name,
+                    },
+                );
                 break;
             }
         }
@@ -140,19 +153,44 @@ impl EventDB {
         // TODO: Remove the tag from all events it occurrs in before removing
         // it from the list.
 
-        let to_remove: Vec<u16> = self.tags
+        // Remove the tag from the database
+        let key_to_remove: Vec<u16> = self.tags
             .iter()
             .filter(|&(_, ref val)| val.short_name == short_name)
             .map(|(key, _)| key.clone())
             .collect();
 
-        if to_remove.is_empty() {
+        if key_to_remove.is_empty() {
             return Err("That short name does not exist");
         }
 
-        for key in to_remove {
-            self.tags.remove(&key);
+        let key_to_remove = key_to_remove.first().unwrap();
+
+        self.tags.remove(key_to_remove);
+
+        // Remove the tag from all events where it's used.
+        let affected_event_times: Vec<i64> = self.events
+            .iter()
+            .filter(|(_, e)| e.tag_ids.contains(key_to_remove))
+            .map(|(t, _)| *t)
+            .collect();
+
+        for time in affected_event_times {
+            let mut event = self.events.get_mut(&time).unwrap();
+            let mut index_to_remove: Option<u16> = None;
+
+            for (i, tag_id) in event.tag_ids.iter().enumerate() {
+                if tag_id == key_to_remove {
+                    index_to_remove = Some(i as u16);
+                    break;
+                }
+            }
+
+            if let Some(i) = index_to_remove {
+                event.tag_ids.remove(i as usize);
+            }
         }
+
         Ok(())
     }
 }
@@ -176,30 +214,34 @@ mod tests {
 
         let time_now = Utc::now().timestamp();
 
-        event_db
-            .add_tag("Zeroeth", "zro")
-            .unwrap();
-        event_db
-            .add_tag("First", "frs")
-            .unwrap();
-        event_db
-            .add_tag("Second", "scn")
-            .unwrap();
+        event_db.add_tag("Zeroeth", "zro").unwrap();
+        event_db.add_tag("First", "frs").unwrap();
+        event_db.add_tag("Second", "scn").unwrap();
 
         // Adding a tag with a short name that already exists should not work.
         assert!(
-            event_db
-                .add_tag("Duplicate", "scn")
-                .is_err(),
+            event_db.add_tag("Duplicate", "scn").is_err(),
             "Adding a duplicate tag didn't fail, but it should"
         );
 
         // Removing a tag should work.
-        event_db.add_tag("Remove this", "rmv");
-        assert!(
-            event_db.remove_tag("rmv".to_string()).is_ok(),
-            "Could not remove a tag"
-        );
+        {
+            let time = time_now + 10;
+            let description = "This event should have no tags";
+            event_db.add_tag("This tag should be removed", "rmv");
+            event_db.add_event(time, description, &["rmv"]);
+            assert!(
+                event_db.remove_tag("rmv".to_string()).is_ok(),
+                "Could not remove a tag"
+            );
+            assert_eq!(
+                *event_db.get_event(time).unwrap(),
+                Event {
+                    description: description.to_string(),
+                    tag_ids: vec![],
+                }
+            );
+        }
 
         event_db
             .add_event(
