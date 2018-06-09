@@ -20,7 +20,7 @@ pub struct Event {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct EventDB {
-    tags: HashMap<u16, Tag>,
+    pub tags: HashMap<u16, Tag>,
     pub events: BTreeMap<i64, Event>,
 }
 
@@ -109,11 +109,32 @@ impl EventDB {
         Ok(())
     }
 
-    pub fn remove_event(&mut self, time: i64) -> Option<Event> {
+    pub fn remove_event(&mut self, position: usize) -> Option<Event> {
+        let time_to_remove = self.events
+            .iter()
+            .rev()
+            .nth(position)
+            .map(|(time, _)| *time);
+
+        if let Some(time) = time_to_remove {
+            return self.remove_event_time(time)
+        }
+        None
+    }
+
+    pub fn remove_event_time(&mut self, time: i64) -> Option<Event> {
         self.events.remove(&time)
     }
 
-    pub fn get_event(&self, time: i64) -> Option<&Event> {
+    pub fn get_event(&self, position: usize) -> Option<&Event> {
+        self.events.iter().rev().nth(position).map(|(_, event)| event)
+    }
+
+    pub fn get_event_mut(&mut self, position: usize) -> Option<&mut Event> {
+        self.events.iter_mut().rev().nth(position).map(|(_, event)| event)
+    }
+
+    pub fn get_event_time(&self, time: i64) -> Option<&Event> {
         self.events.get(&time)
     }
 
@@ -197,8 +218,8 @@ impl EventDB {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Tag {
-    long_name: String,
-    short_name: String,
+    pub long_name: String,
+    pub short_name: String,
 }
 
 #[cfg(test)]
@@ -235,7 +256,7 @@ mod tests {
                 "Could not remove a tag"
             );
             assert_eq!(
-                *event_db.get_event(time).unwrap(),
+                *event_db.get_event_time(time).unwrap(),
                 Event {
                     description: description.to_string(),
                     tag_ids: vec![],
@@ -264,7 +285,7 @@ mod tests {
         event_db
             .add_event(time_now + 2, "This event should be removed", &[])
             .unwrap();
-        assert!(event_db.remove_event(time_now + 2).is_some());
+        assert!(event_db.remove_event_time(time_now + 2).is_some());
 
         assert!(event_db.write(&file_name).is_ok());
 
