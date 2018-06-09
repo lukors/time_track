@@ -126,16 +126,77 @@ impl EventDB {
         self.events.remove(&time)
     }
 
+    fn event_from_pos(&self, position: usize) -> Option<(i64, &Event)> {
+        self.events.iter().rev().nth(position).map(|(time, event)| (*time, event))
+    }
+
+    fn event_from_pos_mut(&mut self, position: usize) -> Option<(i64, &mut Event)> {
+        self.events.iter_mut().rev().nth(position).map(|(time, event)| (*time, event))
+    }
+
     pub fn get_event(&self, position: usize) -> Option<&Event> {
-        self.events.iter().rev().nth(position).map(|(_, event)| event)
+        match self.event_from_pos(position) {
+            Some((_, event)) => Some(event),
+            None => None,
+        }
     }
 
     pub fn get_event_mut(&mut self, position: usize) -> Option<&mut Event> {
-        self.events.iter_mut().rev().nth(position).map(|(_, event)| event)
+        match self.event_from_pos_mut(position) {
+            Some((_, event)) => Some(event),
+            None => None,
+        }
     }
 
     pub fn get_event_time(&self, time: i64) -> Option<&Event> {
         self.events.get(&time)
+    }
+
+    pub fn add_tags_for_event(&mut self, position: usize, short_names: &[&str]) -> Result<(), &str> {
+        let mut tag_ids: Vec<u16> = vec![];
+
+        for short_name in short_names {
+            match self.tag_id_from_short_name(short_name) {
+                Some(tag_id) => tag_ids.push(tag_id),
+                None => return Err("Could not find a specified tag"),
+            }
+        }
+
+        match self.event_from_pos_mut(position) {
+            Some((_, event)) => {
+                event.tag_ids.append(&mut tag_ids);
+                event.tag_ids.sort();
+                event.tag_ids.dedup();
+                Ok(())
+            },
+            None => Err("Could not find an event at that position"),
+        }
+    }
+
+    pub fn remove_tags_for_event(&mut self, position: usize, short_names: &[&str]) -> Result<(), &str> {
+        let mut tag_ids: Vec<u16> = vec![];
+
+        for short_name in short_names {
+            match self.tag_id_from_short_name(short_name) {
+                Some(tag_id) => tag_ids.push(tag_id),
+                None => return Err("Could not find a specified tag"),
+            }
+        }
+
+        match self.event_from_pos_mut(position) {
+            Some((_, event)) => {
+                for tag_id in &tag_ids {
+                    let index = match event.tag_ids.iter().position(|i| *i == *tag_id) {
+                        Some(i) => i,
+                        None => continue,
+                    };
+                    event.tag_ids.remove(index);
+                }
+
+                Ok(())
+            },
+            None => Err("Could not find an event at that position"),
+        }
     }
 
     pub fn add_tag(&mut self, long_name: &str, short_name: &str) -> Result<(), &str> {
@@ -213,6 +274,14 @@ impl EventDB {
         }
 
         Ok(())
+    }
+
+    pub fn tag_id_from_short_name(&self, short_name: &str) -> Option<u16> {
+        self.tags 
+            .iter()
+            .filter(|&(_, ref val)| val.short_name == short_name)
+            .map(|(key, _)| key.clone())
+            .next()
     }
 }
 
