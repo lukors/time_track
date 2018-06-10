@@ -6,10 +6,9 @@ extern crate serde_json;
 
 extern crate chrono;
 
-use chrono::prelude::*;
 use std::{collections::{BTreeMap, HashMap},
           fs::File,
-          io::{self, prelude::*, Error},
+          io,
           path::Path};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,7 +42,7 @@ impl EventDB {
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {
                     let event_db = EventDB::new();
-                    event_db.write(path);
+                    event_db.write(path)?;
                     return Ok(event_db);
                 } else {
                     return Err(e);
@@ -294,6 +293,7 @@ pub struct Tag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::prelude::*;
 
     #[test]
     /// Creates a simple database, writes it to a file, loads the written file
