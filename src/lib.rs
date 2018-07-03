@@ -143,11 +143,25 @@ impl EventDB {
         self.tags.iter()
     }
 
-    pub fn get_event(&self, position: usize) -> Option<&Event> {
+    pub fn get_event(&self, position: usize) -> Option<(i64, &Event)> {
         match self.event_from_pos(position) {
-            Some((_, event)) => Some(event),
+            Some((time, event)) => Some((time, event)),
             None => None,
         }
+    }
+
+    /// Returns the duration of the given event, given in seconds.
+    pub fn get_event_duration(&self, position: usize) -> Option<i64> {
+        let selected_event_time = match self.get_event(position) {
+            Some(event) => event.0,
+            None => return None,
+        };
+        let preceding_event_time = match self.get_event(position + 1) {
+            Some(event) => event.0,
+            None => return None,
+        };
+
+        Some(selected_event_time - preceding_event_time)
     }
 
     pub fn get_event_mut(&mut self, position: usize) -> Option<&mut Event> {
