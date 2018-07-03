@@ -7,7 +7,8 @@ extern crate serde_json;
 extern crate chrono;
 
 use std::{collections::{BTreeMap, HashMap},
-          fs::File,
+          fs::{self,
+               File},
           io,
           path::Path};
 
@@ -55,6 +56,11 @@ impl EventDB {
     }
 
     pub fn write(&self, path: &Path) -> io::Result<()> {
+        let write_dir = path.parent().expect("Invalid database location");
+        if !write_dir.exists() {
+            fs::create_dir_all(write_dir)?;
+        }
+
         let file = File::create(path)?;
         serde_json::to_writer_pretty(&file, self)?;
         Ok(())
@@ -131,6 +137,10 @@ impl EventDB {
 
     fn event_from_pos_mut(&mut self, position: usize) -> Option<(i64, &mut Event)> {
         self.events.iter_mut().rev().nth(position).map(|(time, event)| (*time, event))
+    }
+
+    pub fn tags_iter(&self) -> std::collections::hash_map::Iter<u16, Tag> {
+        self.tags.iter()
     }
 
     pub fn get_event(&self, position: usize) -> Option<&Event> {
