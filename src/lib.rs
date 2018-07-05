@@ -6,7 +6,10 @@ extern crate serde_json;
 
 extern crate chrono;
 
-use std::{collections::{BTreeMap, HashMap},
+use chrono::{prelude::*,
+             Duration};
+use std::{cmp::{min, max},
+          collections::{BTreeMap, HashMap},
           fs::{self,
                File},
           io,
@@ -22,6 +25,14 @@ pub struct Event {
 pub struct EventDB {
     pub tags: HashMap<u16, Tag>,
     pub events: BTreeMap<i64, Event>,
+}
+
+#[derive(Debug)]
+pub struct LogEvent {
+    pub time: i64,
+    pub event: Event,
+    pub duration: Option<i64>,
+    // pub position: u16,
 }
 
 impl EventDB {
@@ -131,11 +142,11 @@ impl EventDB {
         self.events.remove(&time)
     }
 
-    fn event_from_pos(&self, position: usize) -> Option<(i64, &Event)> {
+    pub fn get_event_from_pos(&self, position: usize) -> Option<(i64, &Event)> {
         self.events.iter().rev().nth(position).map(|(time, event)| (*time, event))
     }
 
-    fn event_from_pos_mut(&mut self, position: usize) -> Option<(i64, &mut Event)> {
+    fn get_event_from_pos_mut(&mut self, position: usize) -> Option<(i64, &mut Event)> {
         self.events.iter_mut().rev().nth(position).map(|(time, event)| (*time, event))
     }
 
@@ -143,29 +154,63 @@ impl EventDB {
         self.tags.iter()
     }
 
-    pub fn get_event(&self, position: usize) -> Option<(i64, &Event)> {
-        match self.event_from_pos(position) {
-            Some((time, event)) => Some((time, event)),
-            None => None,
-        }
+    /// Takes a start and end date and returns a vector of information about
+    /// the events on and between those dates.
+    pub fn get_log_data(&self, date_start: &chrono::Date<Local>, date_end: &chrono::Date<Local>) -> Vec<LogEvent> {
+        // let mut log_events = Vec<LogEvent>;
+        
+        let timestamp_early = min(date_start, date_end).and_hms(0, 0, 0).timestamp();
+        let timestamp_late = max(date_start, date_end).and_hms_milli(23, 59, 59, 1000).timestamp();
+        let (date_start, date_end) = ((), ());
+
+        self.events
+            .iter()
+            .rev()
+            .filter(|&(time, _)| {time > &timestamp_early && time < &timestamp_late})
+            .map(|(time, event)| {
+                
+                LogEvent{
+                    time: time.clone(),
+                    event: event.clone(),
+                    duration: self.get_event_duration(*time),
+                }
+            })
+            .collect()
+
+
+        // log_events
     }
 
     /// Returns the duration of the given event, given in seconds.
-    pub fn get_event_duration(&self, position: usize) -> Option<i64> {
-        let selected_event_time = match self.get_event(position) {
-            Some(event) => event.0,
-            None => return None,
-        };
-        let preceding_event_time = match self.get_event(position + 1) {
+    pub fn get_event_duration_from_pos(&self, position: usize) -> Option<i64> {
+        let time = match self.get_event_from_pos(position) {
             Some(event) => event.0,
             None => return None,
         };
 
-        Some(selected_event_time - preceding_event_time)
+        self.get_event_duration(time)
+    }
+
+    fn get_event_duration(&self, time: i64) -> Option<i64> {
+        let preceding_event_position =
+            match self.events.iter().position(|(t, _)| t == &time) {
+                Some(t) => t,
+                None => return None,
+        };
+
+        let preceeding_event_time = match self.events
+            .iter()
+            .nth(preceding_event_position - 1)
+            .map(|(time, _)| *time) {
+                Some(t) => t,
+                None => return None,
+        };
+
+        Some(time - preceeding_event_time)
     }
 
     pub fn get_event_mut(&mut self, position: usize) -> Option<&mut Event> {
-        match self.event_from_pos_mut(position) {
+        match self.get_event_from_pos_mut(position) {
             Some((_, event)) => Some(event),
             None => None,
         }
@@ -185,7 +230,7 @@ impl EventDB {
             }
         }
 
-        match self.event_from_pos_mut(position) {
+        match self.get_event_from_pos_mut(position) {
             Some((_, event)) => {
                 event.tag_ids.append(&mut tag_ids);
                 event.tag_ids.sort();
@@ -206,7 +251,7 @@ impl EventDB {
             }
         }
 
-        match self.event_from_pos_mut(position) {
+        match self.get_event_from_pos_mut(position) {
             Some((_, event)) => {
                 for tag_id in &tag_ids {
                     let index = match event.tag_ids.iter().position(|i| *i == *tag_id) {
