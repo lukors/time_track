@@ -29,7 +29,7 @@ pub struct EventDB {
 
 #[derive(Debug)]
 pub struct LogEvent {
-    pub time: i64,
+    pub timestamp: i64,
     pub event: Event,
     pub duration: Option<i64>,
     pub position: u16,
@@ -169,7 +169,7 @@ impl EventDB {
             .filter(|&(time, _)| {time > &timestamp_early && time < &timestamp_late})
             .map(|(time, event)| {
                 LogEvent{
-                    time: time.clone(),
+                    timestamp: time.clone(),
                     event: event.clone(),
                     duration: self.get_event_duration(*time),
                     position: self.events
@@ -199,6 +199,10 @@ impl EventDB {
                 Some(t) => t,
                 None => return None,
         };
+
+        if preceding_event_position == 0 {
+            return None
+        }
 
         let preceeding_event_time = match self.events
             .iter()
