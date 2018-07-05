@@ -32,7 +32,7 @@ pub struct LogEvent {
     pub time: i64,
     pub event: Event,
     pub duration: Option<i64>,
-    // pub position: u16,
+    pub position: u16,
 }
 
 impl EventDB {
@@ -168,17 +168,19 @@ impl EventDB {
             .rev()
             .filter(|&(time, _)| {time > &timestamp_early && time < &timestamp_late})
             .map(|(time, event)| {
-                
                 LogEvent{
                     time: time.clone(),
                     event: event.clone(),
                     duration: self.get_event_duration(*time),
+                    position: self.events
+                        .iter()
+                        .rev()
+                        .position(|(t, _)| t == time)
+                        .expect("Could not find an event at the given position")
+                        as u16,
                 }
             })
             .collect()
-
-
-        // log_events
     }
 
     /// Returns the duration of the given event, given in seconds.
