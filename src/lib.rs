@@ -156,12 +156,11 @@ impl EventDB {
 
     /// Takes a start and end date and returns a vector of information about
     /// the events on and between those dates.
-    pub fn get_log_data(&self, date_start: &chrono::Date<Local>, date_end: &chrono::Date<Local>) -> Vec<LogEvent> {
+    pub fn get_log_data(&self, time_start: &chrono::DateTime<Local>, time_end: &chrono::DateTime<Local>) -> Vec<LogEvent> {
         // let mut log_events = Vec<LogEvent>;
         
-        let timestamp_early = min(date_start, date_end).and_hms(0, 0, 0).timestamp();
-        let timestamp_late = max(date_start, date_end).and_hms_milli(23, 59, 59, 1000).timestamp();
-        let (date_start, date_end) = ((), ());
+        let timestamp_early = min(time_start, time_end).timestamp();
+        let timestamp_late = max(time_start, time_end).timestamp();
 
         self.events
             .iter()
