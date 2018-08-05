@@ -32,7 +32,7 @@ pub struct LogEvent {
     pub timestamp: i64,
     pub event: Event,
     pub duration: Option<i64>,
-    pub position: u16,
+    pub position: usize,
 }
 
 impl EventDB {
@@ -156,7 +156,7 @@ impl EventDB {
 
     /// Takes a start and end date and returns a vector of information about
     /// the events on and between those dates.
-    pub fn get_log_data(&self, time_start: &chrono::DateTime<Local>, time_end: &chrono::DateTime<Local>) -> Vec<LogEvent> {
+    pub fn get_log_between_times(&self, time_start: &chrono::DateTime<Local>, time_end: &chrono::DateTime<Local>) -> Vec<LogEvent> {
         // let mut log_events = Vec<LogEvent>;
         
         let timestamp_early = min(time_start, time_end).timestamp();
@@ -175,11 +175,25 @@ impl EventDB {
                         .iter()
                         .rev()
                         .position(|(t, _)| t == time)
-                        .expect("Could not find an event at the given position")
-                        as u16,
+                        .expect("Could not find an event at the given position"),
                 }
             })
             .collect()
+    }
+
+    pub fn get_log_from_pos(&self, position: usize) -> Option<LogEvent> {
+        let (timestamp, event) = match self.get_event_from_pos(position) {
+            Some(x) => x,
+            None => return None,
+        };
+        let duration = self.get_event_duration(timestamp);
+
+        Some(LogEvent{
+            timestamp,
+            event: event.clone(),
+            duration,
+            position,
+        })
     }
 
     /// Returns the duration of the given event, given in seconds.
@@ -192,7 +206,7 @@ impl EventDB {
         self.get_event_duration(time)
     }
 
-    fn get_event_duration(&self, time: i64) -> Option<i64> {
+    pub fn get_event_duration(&self, time: i64) -> Option<i64> {
         let preceding_event_position =
             match self.events.iter().position(|(t, _)| t == &time) {
                 Some(t) => t,
