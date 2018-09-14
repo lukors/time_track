@@ -382,10 +382,7 @@ impl EventDb {
         Ok(())
     }
 
-    pub fn remove_tag(&mut self, short_name: String) -> Result<(), &str> {
-        // TODO: Remove the tag from all events it occurrs in before removing
-        // it from the list.
-
+    pub fn remove_tag(&mut self, short_name: String) -> Result<(), EventDbError> {
         // Remove the tag from the database
         let key_to_remove: Vec<u16> = self.tags
             .iter()
@@ -394,7 +391,10 @@ impl EventDb {
             .collect();
 
         if key_to_remove.is_empty() {
-            return Err("That short name does not exist");
+            return Err(EventDbError {
+                error_kind: ErrorKind::InvalidInput,
+                message: "That short name does not exist".to_string(),
+            });
         }
 
         let key_to_remove = key_to_remove.first().unwrap();
@@ -474,15 +474,14 @@ mod tests {
         
         for i in 0..100 {
             match rng.gen_range(0, 2) {
-                0 => qc_add_tag(&mut event_db),
-                1 => qc_remove_tag(&mut event_db),
+                0 => qc_add_tag(&mut rng, &mut event_db),
+                1 => qc_remove_tag(&mut rng, &mut event_db),
                 _ => continue,
             };
         }
     }
 
-    fn qc_add_tag(event_db: &mut EventDb) {
-        let mut rng = thread_rng();
+    fn qc_add_tag(rng: &mut rand::ThreadRng, event_db: &mut EventDb) {
         let long_name = &mut StdThreadGen::new(rng.gen_range(LOW, HIGH));
         let long_name = &String::arbitrary::<StdThreadGen>(long_name);
 
@@ -500,23 +499,19 @@ mod tests {
         event_db.add_tag(long_name, short_name).unwrap();
     }
 
-    fn qc_remove_tag(event_db: &mut EventDb) {
-        let mut rng = thread_rng();
-        let short_name = &mut StdThreadGen::new(rng.gen_range(LOW, HIGH));
-        let mut short_name = String::arbitrary::<StdThreadGen>(short_name);
+    fn qc_remove_tag(rng: &mut rand::ThreadRng, event_db: &mut EventDb) {
+        let tag_count = event_db.tags_iter().count();
 
-
-        if rng.gen() {
-            let tag_count = event_db.tags_iter().count();
-            if tag_count > 0 {
-                short_name = (event_db.tags_iter()
-                    .nth(rng.gen_range(0, tag_count))
-                    .expect("Could not find a tag at the given id")
-                    .1.short_name.to_string());
-            }
+        if tag_count == 0 {
+            return
         }
 
-        // event_db.remove_tag(short_name.to_string()).unwrap();
+        let short_name = (event_db.tags_iter()
+            .nth(rng.gen_range(0, tag_count))
+            .expect("Could not find a tag at the given id")
+            .1.short_name.to_string());
+
+        event_db.remove_tag(short_name.to_string()).unwrap();
     }
 
     #[test]
