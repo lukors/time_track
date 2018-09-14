@@ -131,7 +131,7 @@ impl EventDb {
         time: i64,
         description: &str,
         short_names: &[&str],
-    ) -> Result<(), String> {
+    ) -> Result<(), EventDbError> {
         let mut short_names = short_names.to_vec();
         short_names.sort();
         short_names.dedup();
@@ -147,10 +147,11 @@ impl EventDb {
                 .filter(|sn| !existing_short_names.contains(&sn.to_string()))
                 .collect();
             if !invalid_short_names.is_empty() {
-                return Err(format!(
-                    "Event contains invalid short names: {:?}",
-                    invalid_short_names
-                ));
+                return Err(EventDbError{
+                    error_kind: ErrorKind::InvalidInput,
+                    message: format!("Event contains invalid short names: {:?}"
+                        , invalid_short_names)
+                })
             }
         }
 
@@ -470,15 +471,49 @@ mod tests {
     fn prop_event_db() {
         let mut event_db = EventDb::new();
         let mut rng = thread_rng();
-        let mut test_count = TtTestCount { pass: 0, discard: 0 };
-        
+        let path = format!("test_files/generated/{}.json", rng.gen::<u16>());
+        let event_db_path = Path::new(&path);
+
         for i in 0..100 {
-            match rng.gen_range(0, 2) {
+            match rng.gen_range(0, 5) {
                 0 => qc_add_tag(&mut rng, &mut event_db),
                 1 => qc_remove_tag(&mut rng, &mut event_db),
+                2 => qc_write(&event_db_path, &event_db),
+                3 => event_db = qc_read(&event_db_path, &event_db),
+                4 => qc_add_event(&mut rng, &mut event_db),
                 _ => continue,
             };
         }
+    }
+
+    fn qc_add_event(rng: &mut rand::ThreadRng, event_db: &mut EventDb) {
+        let time = rng.gen::<i64>();
+        let description = &mut StdThreadGen::new(rng.gen_range(LOW, 100));
+        let description = &String::arbitrary::<StdThreadGen>(description);
+
+        let short_names_string: Vec<String> = (0..rng.gen_range(0, 10))
+            .map(|_| get_random_short_name(&mut thread_rng(), &event_db) )
+            .filter(|i| i.is_some())
+            .map(|i| i.unwrap())
+            .collect();
+        let short_names_str: Vec<&str> = short_names_string
+            .iter()
+            .map(|i| i.as_str())
+            .collect();
+
+        event_db.add_event(
+            time,
+            description,
+            short_names_str.as_slice(),
+        ).unwrap();
+    }
+
+    fn qc_write(event_db_path: &Path, event_db: &EventDb) {
+        event_db.write(event_db_path).unwrap();
+    }
+
+    fn qc_read(event_db_path: &Path, event_db: &EventDb) -> EventDb {
+        EventDb::read(event_db_path).unwrap()
     }
 
     fn qc_add_tag(rng: &mut rand::ThreadRng, event_db: &mut EventDb) {
@@ -497,6 +532,22 @@ mod tests {
         }
 
         event_db.add_tag(long_name, short_name).unwrap();
+    }
+
+    fn get_random_short_name(rng: &mut rand::ThreadRng, event_db: &EventDb) -> Option<String> {
+        let tag_count = event_db.tags_iter().count();
+
+        if tag_count == 0 {
+            return None
+        }
+
+        let short_name = event_db.tags_iter().nth(rng.gen_range(0, tag_count));
+
+        if short_name.is_none() {
+            None
+        } else {
+            Some(short_name.unwrap().1.short_name.to_string())
+        }
     }
 
     fn qc_remove_tag(rng: &mut rand::ThreadRng, event_db: &mut EventDb) {
