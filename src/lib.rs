@@ -26,25 +26,25 @@ use std::{cmp::{min, max},
 
 #[derive(Clone)]
 pub struct EventDbError {
-    error_type: EventDbErrorType,
+    error_kind: ErrorKind,
     message: String,
 }
 
 #[derive(Debug, Clone)]
-pub enum EventDbErrorType {
+pub enum ErrorKind {
     AlreadyExists,
     InvalidInput,
 }
 
 impl fmt::Display for EventDbError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}: {}", self.error_type, self.message)
+        write!(f, "{:?}: {}", self.error_kind, self.message)
     }
 }
 
 impl fmt::Debug for EventDbError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}: {}", self.error_type, self.message)
+        write!(f, "{:?}: {}", self.error_kind, self.message)
     }
 }
 
@@ -342,7 +342,7 @@ impl EventDb {
         if short_name.is_empty() {
             return Err(
                 EventDbError {
-                    error_type: EventDbErrorType::InvalidInput,
+                    error_kind: ErrorKind::InvalidInput,
                     message: "You need to have a short name for the tag".to_string(),
                 }
             )
@@ -350,7 +350,7 @@ impl EventDb {
         if long_name.is_empty() {
             return Err(
                 EventDbError {
-                    error_type: EventDbErrorType::InvalidInput,
+                    error_kind: ErrorKind::InvalidInput,
                     message: "You need to have a long name for the tag".to_string(),
                 }
             )
@@ -359,7 +359,7 @@ impl EventDb {
             if existing_tag.short_name == short_name {
                 return Err(
                     EventDbError {
-                        error_type: EventDbErrorType::AlreadyExists,
+                        error_kind: ErrorKind::AlreadyExists,
                         message: "A tag with this short name already exists".to_string(),
                     }
                 )
