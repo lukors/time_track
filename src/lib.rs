@@ -6,6 +6,13 @@ extern crate serde_json;
 
 extern crate chrono;
 
+#[cfg(test)]
+#[macro_use]
+extern crate quickcheck;
+
+#[cfg(test)]
+extern crate rand;
+
 use chrono::{prelude::*,
              Duration};
 use std::{cmp::{min, max},
@@ -19,6 +26,12 @@ use std::{cmp::{min, max},
 pub struct Event {
     pub description: String,
     pub tag_ids: Vec<u16>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct Tag {
+    pub long_name: String,
+    pub short_name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -44,7 +57,6 @@ impl EventDB {
     }
 
     pub fn read(path: &Path) -> io::Result<EventDB> {
-        // TODO: If the DB doesn't exist, create it.
 
         match File::open(path) {
             Ok(file) => {
@@ -62,8 +74,6 @@ impl EventDB {
             }
         }
 
-        // let file = File::open(path)?;
-        // let event_db = serde_json::from_reader(file)?;
     }
 
     pub fn write(&self, path: &Path) -> io::Result<()> {
@@ -372,16 +382,62 @@ impl EventDB {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct Tag {
-    pub long_name: String,
-    pub short_name: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::prelude::*;
+    use quickcheck::TestResult;
+    use quickcheck::Arbitrary;
+    use quickcheck::StdThreadGen;
+    use rand::prelude::*;
+
+    quickcheck! {
+        fn prop_event_db() -> TestResult {
+            let mut event_db = EventDB::new();
+            let mut rng = thread_rng();
+            
+            for i in 0..10 {
+                let low = 0;
+                let high = 20;
+
+                match rng.gen_range(0, 2) {
+                    0 => {
+                        let low = max(low, 1);
+
+                        let long_name = &mut StdThreadGen::new(rng.gen_range(low, high));
+                        let long_name = &String::arbitrary::<StdThreadGen>(long_name);
+
+                        let short_name = &mut StdThreadGen::new(rng.gen_range(low, high));
+                        let short_name = &String::arbitrary::<StdThreadGen>(short_name);
+
+                        event_db.add_tag(long_name, short_name);
+                    },
+                    1 => {
+                        let low = max(low, 1);
+                        let short_name = &mut StdThreadGen::new(rng.gen_range(low, high));
+                        let mut short_name = String::arbitrary::<StdThreadGen>(short_name);
+
+                        if rng.gen() {
+                            let tag_count = event_db.tags_iter().count();
+                            if tag_count > 0 {
+                                short_name = (event_db.tags_iter()
+                                    .nth(rng.gen_range(0, tag_count))
+                                    .expect("Could not find a tag at the given id")
+                                    .1.short_name.to_string());
+                            }
+                        }
+
+                        event_db.remove_tag(short_name.to_string());
+                    },
+                    _ => continue,
+                };
+
+            }
+
+            // print!(".");
+            TestResult::from_bool(true)
+        }
+    }
 
     #[test]
     /// Creates a simple database, writes it to a file, loads the written file
