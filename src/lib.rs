@@ -1,9 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
-
 extern crate serde;
 extern crate serde_json;
-
 extern crate chrono;
 
 #[cfg(test)]
@@ -17,10 +15,49 @@ use chrono::{prelude::*,
              Duration};
 use std::{cmp::{min, max},
           collections::{BTreeMap, HashMap},
+          error,
+          fmt,
           fs::{self,
                File},
           io,
           path::Path};
+
+// type Result<T> = std::result::Result<T, EventDbError>;
+
+#[derive(Clone)]
+pub struct EventDbError {
+    error_type: EventDbErrorType,
+    message: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum EventDbErrorType {
+    AlreadyExists,
+    InvalidInput,
+}
+
+impl fmt::Display for EventDbError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}: {}", self.error_type, self.message)
+    }
+}
+
+impl fmt::Debug for EventDbError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}: {}", self.error_type, self.message)
+    }
+}
+
+impl std::error::Error for EventDbError {
+    fn description(&self) -> &str {
+        &self.message
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        // Generic error, underlying cause isn't tracked.
+        None
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
@@ -35,7 +72,7 @@ pub struct Tag {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct EventDB {
+pub struct EventDb {
     pub tags: HashMap<u16, Tag>,
     pub events: BTreeMap<i64, Event>,
 }
@@ -48,15 +85,17 @@ pub struct LogEvent {
     pub position: usize,
 }
 
-impl EventDB {
-    fn new() -> EventDB {
-        EventDB {
+
+
+impl EventDb {
+    fn new() -> EventDb {
+        EventDb {
             tags: HashMap::new(),
             events: BTreeMap::new(),
         }
     }
 
-    pub fn read(path: &Path) -> io::Result<EventDB> {
+    pub fn read(path: &Path) -> io::Result<EventDb> {
 
         match File::open(path) {
             Ok(file) => {
@@ -65,7 +104,7 @@ impl EventDB {
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {
-                    let event_db = EventDB::new();
+                    let event_db = EventDb::new();
                     event_db.write(path)?;
                     return Ok(event_db);
                 } else {
@@ -296,19 +335,34 @@ impl EventDB {
         }
     }
 
-    pub fn add_tag(&mut self, long_name: &str, short_name: &str) -> Result<(), &str> {
+    pub fn add_tag(&mut self, long_name: &str, short_name: &str) -> Result<(), EventDbError> {
         let short_name = short_name.to_string();
         let long_name = long_name.to_string();
 
         if short_name.is_empty() {
-            return Err("You need to have a short name for the tag");
+            return Err(
+                EventDbError {
+                    error_type: EventDbErrorType::InvalidInput,
+                    message: "You need to have a short name for the tag".to_string(),
+                }
+            )
         }
         if long_name.is_empty() {
-            return Err("You need to have a long name for the tag");
+            return Err(
+                EventDbError {
+                    error_type: EventDbErrorType::InvalidInput,
+                    message: "You need to have a long name for the tag".to_string(),
+                }
+            )
         }
         for existing_tag in self.tags.values() {
             if existing_tag.short_name == short_name {
-                return Err("A tag with this short name already exists");
+                return Err(
+                    EventDbError {
+                        error_type: EventDbErrorType::AlreadyExists,
+                        message: "A tag with this short name already exists".to_string(),
+                    }
+                )
             }
         }
 
@@ -391,52 +445,78 @@ mod tests {
     use quickcheck::StdThreadGen;
     use rand::prelude::*;
 
-    quickcheck! {
-        fn prop_event_db() -> TestResult {
-            let mut event_db = EventDB::new();
-            let mut rng = thread_rng();
-            
-            for i in 0..10 {
-                let low = 0;
-                let high = 20;
+    const LOW: usize = 1;
+    const HIGH: usize = 20;
 
-                match rng.gen_range(0, 2) {
-                    0 => {
-                        let low = max(low, 1);
-
-                        let long_name = &mut StdThreadGen::new(rng.gen_range(low, high));
-                        let long_name = &String::arbitrary::<StdThreadGen>(long_name);
-
-                        let short_name = &mut StdThreadGen::new(rng.gen_range(low, high));
-                        let short_name = &String::arbitrary::<StdThreadGen>(short_name);
-
-                        event_db.add_tag(long_name, short_name);
-                    },
-                    1 => {
-                        let low = max(low, 1);
-                        let short_name = &mut StdThreadGen::new(rng.gen_range(low, high));
-                        let mut short_name = String::arbitrary::<StdThreadGen>(short_name);
-
-                        if rng.gen() {
-                            let tag_count = event_db.tags_iter().count();
-                            if tag_count > 0 {
-                                short_name = (event_db.tags_iter()
-                                    .nth(rng.gen_range(0, tag_count))
-                                    .expect("Could not find a tag at the given id")
-                                    .1.short_name.to_string());
-                            }
-                        }
-
-                        event_db.remove_tag(short_name.to_string());
-                    },
-                    _ => continue,
-                };
-
-            }
-
-            // print!(".");
-            TestResult::from_bool(true)
+    #[test]
+    fn quickcheck() {
+        for i in 0..100 {
+            prop_event_db();
         }
+    }
+
+    enum TtTestResult {
+        Pass,
+        Fail,
+        Discard,
+        Error(String),
+    }
+
+    struct TtTestCount {
+        pass: i32,
+        discard: i32,
+    }
+
+    fn prop_event_db() {
+        let mut event_db = EventDb::new();
+        let mut rng = thread_rng();
+        let mut test_count = TtTestCount { pass: 0, discard: 0 };
+        
+        for i in 0..100 {
+            match rng.gen_range(0, 2) {
+                0 => qc_add_tag(&mut event_db),
+                1 => qc_remove_tag(&mut event_db),
+                _ => continue,
+            };
+        }
+    }
+
+    fn qc_add_tag(event_db: &mut EventDb) {
+        let mut rng = thread_rng();
+        let long_name = &mut StdThreadGen::new(rng.gen_range(LOW, HIGH));
+        let long_name = &String::arbitrary::<StdThreadGen>(long_name);
+
+        let short_name = &mut StdThreadGen::new(rng.gen_range(LOW, HIGH));
+        let short_name = &String::arbitrary::<StdThreadGen>(short_name);
+
+        if short_name.chars().count() == 0 || long_name.chars().count() == 0 {
+            return;
+        }
+
+        if event_db.tag_id_from_short_name(short_name) != None {
+            return;
+        }
+
+        event_db.add_tag(long_name, short_name).unwrap();
+    }
+
+    fn qc_remove_tag(event_db: &mut EventDb) {
+        let mut rng = thread_rng();
+        let short_name = &mut StdThreadGen::new(rng.gen_range(LOW, HIGH));
+        let mut short_name = String::arbitrary::<StdThreadGen>(short_name);
+
+
+        if rng.gen() {
+            let tag_count = event_db.tags_iter().count();
+            if tag_count > 0 {
+                short_name = (event_db.tags_iter()
+                    .nth(rng.gen_range(0, tag_count))
+                    .expect("Could not find a tag at the given id")
+                    .1.short_name.to_string());
+            }
+        }
+
+        // event_db.remove_tag(short_name.to_string()).unwrap();
     }
 
     #[test]
@@ -444,7 +524,7 @@ mod tests {
     /// and checks that the contents are the same as the original data.
     fn write_read_db() {
         let file_name = Path::new("test_files/read_write_test.json");
-        let mut event_db = EventDB::new();
+        let mut event_db = EventDb::new();
 
         let time_now = Utc::now().timestamp();
 
@@ -502,7 +582,7 @@ mod tests {
 
         assert!(event_db.write(&file_name).is_ok());
 
-        let event_db_read = EventDB::read(&file_name).unwrap();
+        let event_db_read = EventDb::read(&file_name).unwrap();
         assert_eq!(event_db, event_db_read);
     }
 }
