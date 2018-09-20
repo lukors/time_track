@@ -302,7 +302,7 @@ impl EventDb {
     /// Gets the duration of the input `EventId`.
     pub fn get_event_duration(&self, event_id: &EventId) -> Option<i64> {
         if !event_id.exists(&self) {
-            return None
+            return None;
         }
 
         let current_event_timestamp = event_id.to_timestamp(&self).unwrap();
