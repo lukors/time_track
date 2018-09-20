@@ -83,7 +83,7 @@ impl EventId {
                     .iter()
                     .rev()
                     .enumerate()
-                    .find(|(_, (time, _event))| t == *time)//
+                    .find(|(_, (time, _event))| t == *time)
                     .map(|(i, (_, _)) | i)
             }
             EventId::Position(pos) => Some(*pos),
@@ -231,14 +231,6 @@ impl EventDb {
             .map(|(time, event)| (*time, event))
     }
 
-    fn get_event_from_pos_mut(&mut self, position: usize) -> Option<(i64, &mut Event)> {
-        self.events
-            .iter_mut()
-            .rev()
-            .nth(position)
-            .map(|(time, event)| (*time, event))
-    }
-
     pub fn tags_iter(&self) -> std::collections::hash_map::Iter<u16, Tag> {
         self.tags.iter()
     }
@@ -300,6 +292,7 @@ impl EventDb {
         }
     }
 
+    /// Gets the duration of the input `EventId`.
     pub fn get_event_duration(&self, event_id: &EventId) -> Option<i64> {
         let current_event_timestamp = event_id.to_timestamp(&self).unwrap();
 
@@ -308,28 +301,10 @@ impl EventDb {
 
         let preceeding_event_timestamp = preceeding_event_position.to_timestamp(&self).unwrap();
 
-        // let preceding_event_position = match self.events.iter().position(|(t, _)| t == &time) {
-        //     Some(t) => t,
-        //     None => return None,
-        // };
-
-        // if preceding_event_position == 0 {
-        //     return None;
-        // }
-
-        // let preceeding_event_time = match self
-        //     .events
-        //     .iter()
-        //     .nth(preceding_event_position - 1)
-        //     .map(|(time, _)| *time)
-        // {
-        //     Some(t) => t,
-        //     None => return None,
-        // };
-
         Some(current_event_timestamp - preceeding_event_timestamp)
     }
 
+    /// Returns a mutable reference to the `Event` identified by `EventId`.
     pub fn get_event_mut(&mut self, event_id: &EventId) -> Option<&mut Event> {
         match event_id.to_timestamp(self) {
             // Since `to_timestamp()` uses the `EventDb` to get `timestamp`, we can `unwrap()`
@@ -370,7 +345,7 @@ impl EventDb {
 
     pub fn remove_tags_for_event(
         &mut self,
-        position: usize,
+        event_id: &EventId,
         short_names: &[&str],
     ) -> Result<(), &str> {
         let mut tag_ids: Vec<u16> = vec![];
@@ -382,8 +357,8 @@ impl EventDb {
             }
         }
 
-        match self.get_event_from_pos_mut(position) {
-            Some((_, event)) => {
+        match self.get_event_mut(&event_id) {
+            Some(event) => {
                 for tag_id in &tag_ids {
                     let index = match event.tag_ids.iter().position(|i| *i == *tag_id) {
                         Some(i) => i,
