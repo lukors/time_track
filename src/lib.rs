@@ -205,30 +205,18 @@ impl EventDb {
         Ok(())
     }
 
-    pub fn remove_event(&mut self, position: usize) -> Option<Event> {
-        let time_to_remove = self
-            .events
-            .iter()
-            .rev()
-            .nth(position)
-            .map(|(time, _)| *time);
+    pub fn remove_event(&mut self, event_id: &EventId) -> Option<Event> {
+        let timestamp = event_id.to_timestamp(&self);
 
-        if let Some(time) = time_to_remove {
-            return self.remove_event_time(time);
+        if let Some(t) = timestamp {
+            self.events.remove(&t)
+        } else {
+            None
         }
-        None
     }
 
     pub fn remove_event_time(&mut self, time: i64) -> Option<Event> {
         self.events.remove(&time)
-    }
-
-    pub fn get_event_from_pos(&self, position: usize) -> Option<(i64, &Event)> {
-        self.events
-            .iter()
-            .rev()
-            .nth(position)
-            .map(|(time, event)| (*time, event))
     }
 
     pub fn tags_iter(&self) -> std::collections::hash_map::Iter<u16, Tag> {
@@ -646,7 +634,7 @@ mod tests {
         event_db
             .add_event(time_now + 2, "This event should be removed", &[])
             .unwrap();
-        assert!(event_db.remove_event_time(time_now + 2).is_some());
+        assert!(event_db.remove_event(&EventId::Timestamp(time_now + 2)).is_some());
 
         assert!(event_db.write(&file_name).is_ok());
 
