@@ -125,15 +125,15 @@ impl EventDb {
         match File::open(path) {
             Ok(file) => {
                 let event_db = serde_json::from_reader(file)?;
-                return Ok(event_db);
+                Ok(event_db)
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {
                     let event_db = EventDb::new();
                     event_db.write(path)?;
-                    return Ok(event_db);
+                    Ok(event_db)
                 } else {
-                    return Err(e);
+                    Err(e)
                 }
             }
         }
@@ -187,7 +187,7 @@ impl EventDb {
             .flat_map(|sn| {
                 self.tags
                     .iter()
-                    .filter(|(_, v)| v.short_name == sn.to_string())
+                    .filter(|(_, v)| v.short_name == *sn)
                     .map(|(k, _)| *k)
                     .collect::<Vec<u16>>()
             }).collect();
@@ -254,9 +254,9 @@ impl EventDb {
         self.events
             .iter()
             .rev()
-            .filter(|&(time, _)| time > &timestamp_early && time < &timestamp_late)
+            .filter(|&(time, _)| *time > timestamp_early && *time < timestamp_late)
             .map(|(time, event)| LogEvent {
-                timestamp: time.clone(),
+                timestamp: *time,
                 event: event.clone(),
                 duration: self.get_event_duration(*time),
                 position: self
@@ -285,11 +285,11 @@ impl EventDb {
     }
 
     /// Returns the event at the given `EventId`.
-    pub fn get_event(&self, event_id: EventId) -> Option<&Event> {
+    pub fn get_event(&self, event_id: &EventId) -> Option<&Event> {
         match event_id.to_timestamp(self) {
             // Since `to_timestamp()` uses the `EventDb` to get `timestamp`, we can `unwrap()`
             // getting the `Event` at `timestamp` since we know it will exist.
-            Some(timestamp) => Some(self.events.get(&timestamp).unwrap()),
+            Some(timestamp) => Some(&self.events[&timestamp]),
             None => None,
         }
     }
@@ -418,6 +418,10 @@ impl EventDb {
             }
         }
 
+        // Ignoring lint because this needs to be a two-step process, and the lint doesn't
+        // understand that.
+        #[allow(unknown_lints)]
+        #[allow(map_entry)]
         for number in 0.. {
             if !self.tags.contains_key(&number) {
                 self.tags.insert(
@@ -434,13 +438,13 @@ impl EventDb {
         Ok(())
     }
 
-    pub fn remove_tag(&mut self, short_name: String) -> Result<(), EventDbError> {
+    pub fn remove_tag(&mut self, short_name: &str) -> Result<(), EventDbError> {
         // Remove the tag from the database
         let key_to_remove: Vec<u16> = self
             .tags
             .iter()
             .filter(|&(_, ref val)| val.short_name == short_name)
-            .map(|(key, _)| key.clone())
+            .map(|(key, _)| *key)
             .collect();
 
         if key_to_remove.is_empty() {
@@ -485,7 +489,7 @@ impl EventDb {
         self.tags
             .iter()
             .filter(|&(_, ref val)| val.short_name == short_name)
-            .map(|(key, _)| key.clone())
+            .map(|(key, _)| *key)
             .next()
     }
 }
@@ -596,10 +600,9 @@ mod tests {
             .nth(rng.gen_range(0, tag_count))
             .expect("Could not find a tag at the given id")
             .1
-            .short_name
-            .to_string();
+            .short_name.to_owned();
 
-        event_db.remove_tag(short_name.to_string()).unwrap();
+        event_db.remove_tag(&short_name).unwrap();
     }
 
     #[test]
@@ -630,7 +633,7 @@ mod tests {
                 .unwrap();
             event_db.add_event(time, description, &["rmv"]).unwrap();
             assert!(
-                event_db.remove_tag("rmv".to_string()).is_ok(),
+                event_db.remove_tag("rmv").is_ok(),
                 "Could not remove a tag"
             );
             assert_eq!(
