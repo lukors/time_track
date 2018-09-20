@@ -63,9 +63,14 @@ pub enum EventId {
 }
 
 impl EventId {
-    fn to_timestamp(&self, event_db: &EventDb) -> Option<i64> {
+    /// If there is a corresponding `Event` in the `EventDb` for this `EventId`, return the
+    /// timestamp of the `EventId` as `Option<i64>`, otherwise return `None`.
+    pub fn to_timestamp(&self, event_db: &EventDb) -> Option<i64> {
         match self {
-            EventId::Timestamp(t) => Some(*t),
+            EventId::Timestamp(t) => match event_db.events.get(t) {
+                Some(_) => Some(*t),
+                None => None,
+            },
             EventId::Position(pos) => event_db
                 .events
                 .iter()
@@ -75,7 +80,9 @@ impl EventId {
         }
     }
 
-    fn to_position(&self, event_db: &EventDb) -> Option<usize> {
+    /// If there is a corresponding `Event` in the `EventDb` for this `EventId`, return the position
+    /// of the `EventId` as `Option<usize>`. Otherwise return `None`.
+    pub fn to_position(&self, event_db: &EventDb) -> Option<usize> {
         match self {
             EventId::Timestamp(t) => event_db
                 .events
@@ -84,8 +91,24 @@ impl EventId {
                 .enumerate()
                 .find(|(_, (time, _event))| t == *time)
                 .map(|(i, (_, _))| i),
-            EventId::Position(pos) => Some(*pos),
+            EventId::Position(pos) => {
+                let event = event_db
+                    .events
+                    .iter()
+                    .rev()
+                    .nth(*pos)
+                    .map(|(_time, event)| event);
+
+                match event {
+                    Some(_) => Some(*pos),
+                    None => None,
+                }
+            }
         }
+    }
+
+    pub fn exists(&self, event_db: &EventDb) -> bool {
+        event_db.get_event(&self).is_some()
     }
 }
 
@@ -249,7 +272,7 @@ impl EventDb {
     }
 
     /// Returns the `LogEvent` for the given `EventId`.
-    pub fn get_log_event(&self, event_id: &EventId) -> Option<LogEvent> {
+    pub fn get_log(&self, event_id: &EventId) -> Option<LogEvent> {
         let event = match self.get_event(event_id) {
             Some(x) => x,
             None => return None,
@@ -278,11 +301,13 @@ impl EventDb {
 
     /// Gets the duration of the input `EventId`.
     pub fn get_event_duration(&self, event_id: &EventId) -> Option<i64> {
+        if !event_id.exists(&self) {
+            return None
+        }
+
         let current_event_timestamp = event_id.to_timestamp(&self).unwrap();
-
-        let preceeding_event_position = event_id.to_position(&self).unwrap() - 1;
-        let preceeding_event_position = EventId::Position(preceeding_event_position);
-
+        let current_event_position = event_id.to_position(&self).unwrap();
+        let preceeding_event_position = EventId::Position(current_event_position + 1);
         let preceeding_event_timestamp = preceeding_event_position.to_timestamp(&self).unwrap();
 
         Some(current_event_timestamp - preceeding_event_timestamp)
