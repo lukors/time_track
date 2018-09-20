@@ -65,24 +65,28 @@ pub enum EventId {
 impl EventId {
     fn to_timestamp(&self, event_db: &EventDb) -> Option<i64> {
         match self {
-            EventId::Timestamp(t) => {
-                if event_db.events.get(t).is_some() {
-                    Some(*t)
-                } else {
-                    None
-                }
-            }
+            EventId::Timestamp(t) => Some(*t),
             EventId::Position(pos) => {
-                Some(
-                    event_db
-                        .events
-                        .iter()
-                        .rev()
-                        .nth(*pos)
-                        .map(|(time, _event)| *time)
-                        .unwrap(), // An event without a timestamp is impossible
-                )
+                event_db.events
+                    .iter()
+                    .rev()
+                    .nth(*pos)
+                    .map(|(time, _event)| *time)
             }
+        }
+    }
+
+    fn to_position(&self, event_db: &EventDb) -> Option<usize> {
+        match self {
+            EventId::Timestamp(t) => {
+                event_db.events
+                    .iter()
+                    .rev()
+                    .enumerate()
+                    .find(|(_, (time, _event))| t == *time)//
+                    .map(|(i, (_, _)) | i)
+            }
+            EventId::Position(pos) => Some(*pos),
         }
     }
 }
@@ -258,7 +262,7 @@ impl EventDb {
             .map(|(time, event)| LogEvent {
                 timestamp: *time,
                 event: event.clone(),
-                duration: self.get_event_duration(*time),
+                duration: self.get_event_duration(&EventId::Timestamp(*time)),
                 position: self
                     .events
                     .iter()
@@ -269,12 +273,14 @@ impl EventDb {
     }
 
     /// Returns the `LogEvent` for the given `EventId`.
-    pub fn get_log_from_pos(&self, position: usize) -> Option<LogEvent> {
-        let (timestamp, event) = match self.get_event_from_pos(position) {
+    pub fn get_log_event(&self, event_id: &EventId) -> Option<LogEvent> {
+        let event = match self.get_event(event_id) {
             Some(x) => x,
             None => return None,
         };
-        let duration = self.get_event_duration(timestamp);
+        let duration = self.get_event_duration(&event_id);
+        let timestamp = event_id.to_timestamp(&self).unwrap();
+        let position = event_id.to_position(&self).unwrap();
 
         Some(LogEvent {
             timestamp,
@@ -294,42 +300,41 @@ impl EventDb {
         }
     }
 
-    /// Returns the duration of the given event, given in seconds.
-    pub fn get_event_duration_from_pos(&self, position: usize) -> Option<i64> {
-        let time = match self.get_event_from_pos(position) {
-            Some(event) => event.0,
-            None => return None,
-        };
+    pub fn get_event_duration(&self, event_id: &EventId) -> Option<i64> {
+        let current_event_timestamp = event_id.to_timestamp(&self).unwrap();
 
-        self.get_event_duration(time)
+        let preceeding_event_position = event_id.to_position(&self).unwrap() - 1;
+        let preceeding_event_position = EventId::Position(preceeding_event_position);
+
+        let preceeding_event_timestamp = preceeding_event_position.to_timestamp(&self).unwrap();
+
+        // let preceding_event_position = match self.events.iter().position(|(t, _)| t == &time) {
+        //     Some(t) => t,
+        //     None => return None,
+        // };
+
+        // if preceding_event_position == 0 {
+        //     return None;
+        // }
+
+        // let preceeding_event_time = match self
+        //     .events
+        //     .iter()
+        //     .nth(preceding_event_position - 1)
+        //     .map(|(time, _)| *time)
+        // {
+        //     Some(t) => t,
+        //     None => return None,
+        // };
+
+        Some(current_event_timestamp - preceeding_event_timestamp)
     }
 
-    pub fn get_event_duration(&self, time: i64) -> Option<i64> {
-        let preceding_event_position = match self.events.iter().position(|(t, _)| t == &time) {
-            Some(t) => t,
-            None => return None,
-        };
-
-        if preceding_event_position == 0 {
-            return None;
-        }
-
-        let preceeding_event_time = match self
-            .events
-            .iter()
-            .nth(preceding_event_position - 1)
-            .map(|(time, _)| *time)
-        {
-            Some(t) => t,
-            None => return None,
-        };
-
-        Some(time - preceeding_event_time)
-    }
-
-    pub fn get_event_mut(&mut self, position: usize) -> Option<&mut Event> {
-        match self.get_event_from_pos_mut(position) {
-            Some((_, event)) => Some(event),
+    pub fn get_event_mut(&mut self, event_id: &EventId) -> Option<&mut Event> {
+        match event_id.to_timestamp(self) {
+            // Since `to_timestamp()` uses the `EventDb` to get `timestamp`, we can `unwrap()`
+            // getting the `Event` at `timestamp` since we know it will exist.
+            Some(timestamp) => Some(self.events.get_mut(&timestamp).unwrap()),
             None => None,
         }
     }
@@ -340,7 +345,7 @@ impl EventDb {
 
     pub fn add_tags_for_event(
         &mut self,
-        position: usize,
+        event_id: &EventId,
         short_names: &[&str],
     ) -> Result<(), &str> {
         let mut tag_ids: Vec<u16> = vec![];
@@ -352,14 +357,14 @@ impl EventDb {
             }
         }
 
-        match self.get_event_from_pos_mut(position) {
-            Some((_, event)) => {
+        match self.get_event_mut(event_id) {
+            Some(event) => {
                 event.tag_ids.append(&mut tag_ids);
                 event.tag_ids.sort();
                 event.tag_ids.dedup();
                 Ok(())
             }
-            None => Err("Could not find an event at that position"),
+            None => Err("Could not find an event at that `EventId`"),
         }
     }
 
@@ -493,6 +498,7 @@ impl EventDb {
             .next()
     }
 }
+
 
 #[cfg(test)]
 mod tests {
