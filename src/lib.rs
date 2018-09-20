@@ -1,26 +1,24 @@
 #[macro_use]
 extern crate serde_derive;
+extern crate chrono;
 extern crate serde;
 extern crate serde_json;
-extern crate chrono;
 
 #[cfg(test)]
-#[macro_use]
 extern crate quickcheck;
 
 #[cfg(test)]
 extern crate rand;
 
-use chrono::{prelude::*,
-             Duration};
-use std::{cmp::{min, max},
-          collections::{BTreeMap, HashMap},
-          error,
-          fmt,
-          fs::{self,
-               File},
-          io,
-          path::Path};
+use chrono::prelude::*;
+use std::{
+    cmp::{max, min},
+    collections::{BTreeMap, HashMap},
+    error, fmt,
+    fs::{self, File},
+    io,
+    path::Path,
+};
 
 // type Result<T> = std::result::Result<T, EventDbError>;
 
@@ -59,6 +57,36 @@ impl std::error::Error for EventDbError {
     }
 }
 
+pub enum EventId {
+    Timestamp(i64),
+    Position(usize),
+}
+
+impl EventId {
+    fn to_timestamp(&self, event_db: &EventDb) -> Option<i64> {
+        match self {
+            EventId::Timestamp(t) => {
+                if event_db.events.get(t).is_some() {
+                    Some(*t)
+                } else {
+                    None
+                }
+            }
+            EventId::Position(pos) => {
+                Some(
+                    event_db
+                        .events
+                        .iter()
+                        .rev()
+                        .nth(*pos)
+                        .map(|(time, _event)| *time)
+                        .unwrap(), // An event without a timestamp is impossible
+                )
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
     pub description: String,
@@ -85,8 +113,6 @@ pub struct LogEvent {
     pub position: usize,
 }
 
-
-
 impl EventDb {
     fn new() -> EventDb {
         EventDb {
@@ -96,7 +122,6 @@ impl EventDb {
     }
 
     pub fn read(path: &Path) -> io::Result<EventDb> {
-
         match File::open(path) {
             Ok(file) => {
                 let event_db = serde_json::from_reader(file)?;
@@ -112,7 +137,6 @@ impl EventDb {
                 }
             }
         }
-
     }
 
     pub fn write(&self, path: &Path) -> io::Result<()> {
@@ -137,7 +161,8 @@ impl EventDb {
         short_names.dedup();
 
         {
-            let existing_short_names: Vec<_> = self.tags
+            let existing_short_names: Vec<_> = self
+                .tags
                 .iter()
                 .map(|(_, v)| v.short_name.clone())
                 .collect();
@@ -147,11 +172,13 @@ impl EventDb {
                 .filter(|sn| !existing_short_names.contains(&sn.to_string()))
                 .collect();
             if !invalid_short_names.is_empty() {
-                return Err(EventDbError{
+                return Err(EventDbError {
                     error_kind: ErrorKind::InvalidInput,
-                    message: format!("Event contains invalid short names: {:?}"
-                        , invalid_short_names)
-                })
+                    message: format!(
+                        "Event contains invalid short names: {:?}",
+                        invalid_short_names
+                    ),
+                });
             }
         }
 
@@ -163,8 +190,7 @@ impl EventDb {
                     .filter(|(_, v)| v.short_name == sn.to_string())
                     .map(|(k, _)| *k)
                     .collect::<Vec<u16>>()
-            })
-            .collect();
+            }).collect();
 
         let description = description.to_string();
         let event = Event {
@@ -176,14 +202,15 @@ impl EventDb {
     }
 
     pub fn remove_event(&mut self, position: usize) -> Option<Event> {
-        let time_to_remove = self.events
+        let time_to_remove = self
+            .events
             .iter()
             .rev()
             .nth(position)
             .map(|(time, _)| *time);
 
         if let Some(time) = time_to_remove {
-            return self.remove_event_time(time)
+            return self.remove_event_time(time);
         }
         None
     }
@@ -193,11 +220,19 @@ impl EventDb {
     }
 
     pub fn get_event_from_pos(&self, position: usize) -> Option<(i64, &Event)> {
-        self.events.iter().rev().nth(position).map(|(time, event)| (*time, event))
+        self.events
+            .iter()
+            .rev()
+            .nth(position)
+            .map(|(time, event)| (*time, event))
     }
 
     fn get_event_from_pos_mut(&mut self, position: usize) -> Option<(i64, &mut Event)> {
-        self.events.iter_mut().rev().nth(position).map(|(time, event)| (*time, event))
+        self.events
+            .iter_mut()
+            .rev()
+            .nth(position)
+            .map(|(time, event)| (*time, event))
     }
 
     pub fn tags_iter(&self) -> std::collections::hash_map::Iter<u16, Tag> {
@@ -206,31 +241,34 @@ impl EventDb {
 
     /// Takes a start and end date and returns a vector of information about
     /// the events on and between those dates.
-    pub fn get_log_between_times(&self, time_start: &chrono::DateTime<Local>, time_end: &chrono::DateTime<Local>) -> Vec<LogEvent> {
+    pub fn get_log_between_times(
+        &self,
+        time_start: &chrono::DateTime<Local>,
+        time_end: &chrono::DateTime<Local>,
+    ) -> Vec<LogEvent> {
         // let mut log_events = Vec<LogEvent>;
-        
+
         let timestamp_early = min(time_start, time_end).timestamp();
         let timestamp_late = max(time_start, time_end).timestamp();
 
         self.events
             .iter()
             .rev()
-            .filter(|&(time, _)| {time > &timestamp_early && time < &timestamp_late})
-            .map(|(time, event)| {
-                LogEvent{
-                    timestamp: time.clone(),
-                    event: event.clone(),
-                    duration: self.get_event_duration(*time),
-                    position: self.events
-                        .iter()
-                        .rev()
-                        .position(|(t, _)| t == time)
-                        .expect("Could not find an event at the given position"),
-                }
-            })
-            .collect()
+            .filter(|&(time, _)| time > &timestamp_early && time < &timestamp_late)
+            .map(|(time, event)| LogEvent {
+                timestamp: time.clone(),
+                event: event.clone(),
+                duration: self.get_event_duration(*time),
+                position: self
+                    .events
+                    .iter()
+                    .rev()
+                    .position(|(t, _)| t == time)
+                    .expect("Could not find an event at the given position"),
+            }).collect()
     }
 
+    /// Returns the `LogEvent` for the given `EventId`.
     pub fn get_log_from_pos(&self, position: usize) -> Option<LogEvent> {
         let (timestamp, event) = match self.get_event_from_pos(position) {
             Some(x) => x,
@@ -238,12 +276,22 @@ impl EventDb {
         };
         let duration = self.get_event_duration(timestamp);
 
-        Some(LogEvent{
+        Some(LogEvent {
             timestamp,
             event: event.clone(),
             duration,
             position,
         })
+    }
+
+    /// Returns the event at the given `EventId`.
+    pub fn get_event(&self, event_id: EventId) -> Option<&Event> {
+        match event_id.to_timestamp(self) {
+            // Since `to_timestamp()` uses the `EventDb` to get `timestamp`, we can `unwrap()`
+            // getting the `Event` at `timestamp` since we know it will exist.
+            Some(timestamp) => Some(self.events.get(&timestamp).unwrap()),
+            None => None,
+        }
     }
 
     /// Returns the duration of the given event, given in seconds.
@@ -257,22 +305,23 @@ impl EventDb {
     }
 
     pub fn get_event_duration(&self, time: i64) -> Option<i64> {
-        let preceding_event_position =
-            match self.events.iter().position(|(t, _)| t == &time) {
-                Some(t) => t,
-                None => return None,
+        let preceding_event_position = match self.events.iter().position(|(t, _)| t == &time) {
+            Some(t) => t,
+            None => return None,
         };
 
         if preceding_event_position == 0 {
-            return None
+            return None;
         }
 
-        let preceeding_event_time = match self.events
+        let preceeding_event_time = match self
+            .events
             .iter()
             .nth(preceding_event_position - 1)
-            .map(|(time, _)| *time) {
-                Some(t) => t,
-                None => return None,
+            .map(|(time, _)| *time)
+        {
+            Some(t) => t,
+            None => return None,
         };
 
         Some(time - preceeding_event_time)
@@ -289,7 +338,11 @@ impl EventDb {
         self.events.get(&time)
     }
 
-    pub fn add_tags_for_event(&mut self, position: usize, short_names: &[&str]) -> Result<(), &str> {
+    pub fn add_tags_for_event(
+        &mut self,
+        position: usize,
+        short_names: &[&str],
+    ) -> Result<(), &str> {
         let mut tag_ids: Vec<u16> = vec![];
 
         for short_name in short_names {
@@ -305,12 +358,16 @@ impl EventDb {
                 event.tag_ids.sort();
                 event.tag_ids.dedup();
                 Ok(())
-            },
+            }
             None => Err("Could not find an event at that position"),
         }
     }
 
-    pub fn remove_tags_for_event(&mut self, position: usize, short_names: &[&str]) -> Result<(), &str> {
+    pub fn remove_tags_for_event(
+        &mut self,
+        position: usize,
+        short_names: &[&str],
+    ) -> Result<(), &str> {
         let mut tag_ids: Vec<u16> = vec![];
 
         for short_name in short_names {
@@ -331,7 +388,7 @@ impl EventDb {
                 }
 
                 Ok(())
-            },
+            }
             None => Err("Could not find an event at that position"),
         }
     }
@@ -341,29 +398,23 @@ impl EventDb {
         let long_name = long_name.to_string();
 
         if short_name.is_empty() {
-            return Err(
-                EventDbError {
-                    error_kind: ErrorKind::InvalidInput,
-                    message: "You need to have a short name for the tag".to_string(),
-                }
-            )
+            return Err(EventDbError {
+                error_kind: ErrorKind::InvalidInput,
+                message: "You need to have a short name for the tag".to_string(),
+            });
         }
         if long_name.is_empty() {
-            return Err(
-                EventDbError {
-                    error_kind: ErrorKind::InvalidInput,
-                    message: "You need to have a long name for the tag".to_string(),
-                }
-            )
+            return Err(EventDbError {
+                error_kind: ErrorKind::InvalidInput,
+                message: "You need to have a long name for the tag".to_string(),
+            });
         }
         for existing_tag in self.tags.values() {
             if existing_tag.short_name == short_name {
-                return Err(
-                    EventDbError {
-                        error_kind: ErrorKind::AlreadyExists,
-                        message: "A tag with this short name already exists".to_string(),
-                    }
-                )
+                return Err(EventDbError {
+                    error_kind: ErrorKind::AlreadyExists,
+                    message: "A tag with this short name already exists".to_string(),
+                });
             }
         }
 
@@ -385,7 +436,8 @@ impl EventDb {
 
     pub fn remove_tag(&mut self, short_name: String) -> Result<(), EventDbError> {
         // Remove the tag from the database
-        let key_to_remove: Vec<u16> = self.tags
+        let key_to_remove: Vec<u16> = self
+            .tags
             .iter()
             .filter(|&(_, ref val)| val.short_name == short_name)
             .map(|(key, _)| key.clone())
@@ -403,7 +455,8 @@ impl EventDb {
         self.tags.remove(key_to_remove);
 
         // Remove the tag from all events where it's used.
-        let affected_event_times: Vec<i64> = self.events
+        let affected_event_times: Vec<i64> = self
+            .events
             .iter()
             .filter(|(_, e)| e.tag_ids.contains(key_to_remove))
             .map(|(t, _)| *t)
@@ -429,7 +482,7 @@ impl EventDb {
     }
 
     pub fn tag_id_from_short_name(&self, short_name: &str) -> Option<u16> {
-        self.tags 
+        self.tags
             .iter()
             .filter(|&(_, ref val)| val.short_name == short_name)
             .map(|(key, _)| key.clone())
@@ -440,8 +493,6 @@ impl EventDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::prelude::*;
-    use quickcheck::TestResult;
     use quickcheck::Arbitrary;
     use quickcheck::StdThreadGen;
     use rand::prelude::*;
@@ -451,21 +502,9 @@ mod tests {
 
     #[test]
     fn quickcheck() {
-        for i in 0..100 {
+        for _ in 0..100 {
             prop_event_db();
         }
-    }
-
-    enum TtTestResult {
-        Pass,
-        Fail,
-        Discard,
-        Error(String),
-    }
-
-    struct TtTestCount {
-        pass: i32,
-        discard: i32,
     }
 
     fn prop_event_db() {
@@ -474,12 +513,12 @@ mod tests {
         let path = format!("test_files/generated/{}.json", rng.gen::<u16>());
         let event_db_path = Path::new(&path);
 
-        for i in 0..100 {
+        for _ in 0..100 {
             match rng.gen_range(0, 5) {
                 0 => qc_add_tag(&mut rng, &mut event_db),
                 1 => qc_remove_tag(&mut rng, &mut event_db),
                 2 => qc_write(&event_db_path, &event_db),
-                3 => event_db = qc_read(&event_db_path, &event_db),
+                3 => event_db = qc_read(&event_db_path),
                 4 => qc_add_event(&mut rng, &mut event_db),
                 _ => continue,
             };
@@ -492,27 +531,22 @@ mod tests {
         let description = &String::arbitrary::<StdThreadGen>(description);
 
         let short_names_string: Vec<String> = (0..rng.gen_range(0, 10))
-            .map(|_| get_random_short_name(&mut thread_rng(), &event_db) )
+            .map(|_| get_random_short_name(&mut thread_rng(), &event_db))
             .filter(|i| i.is_some())
             .map(|i| i.unwrap())
             .collect();
-        let short_names_str: Vec<&str> = short_names_string
-            .iter()
-            .map(|i| i.as_str())
-            .collect();
+        let short_names_str: Vec<&str> = short_names_string.iter().map(|i| i.as_str()).collect();
 
-        event_db.add_event(
-            time,
-            description,
-            short_names_str.as_slice(),
-        ).unwrap();
+        event_db
+            .add_event(time, description, short_names_str.as_slice())
+            .unwrap();
     }
 
     fn qc_write(event_db_path: &Path, event_db: &EventDb) {
         event_db.write(event_db_path).unwrap();
     }
 
-    fn qc_read(event_db_path: &Path, event_db: &EventDb) -> EventDb {
+    fn qc_read(event_db_path: &Path) -> EventDb {
         EventDb::read(event_db_path).unwrap()
     }
 
@@ -538,7 +572,7 @@ mod tests {
         let tag_count = event_db.tags_iter().count();
 
         if tag_count == 0 {
-            return None
+            return None;
         }
 
         let short_name = event_db.tags_iter().nth(rng.gen_range(0, tag_count));
@@ -554,13 +588,16 @@ mod tests {
         let tag_count = event_db.tags_iter().count();
 
         if tag_count == 0 {
-            return
+            return;
         }
 
-        let short_name = (event_db.tags_iter()
+        let short_name = event_db
+            .tags_iter()
             .nth(rng.gen_range(0, tag_count))
             .expect("Could not find a tag at the given id")
-            .1.short_name.to_string());
+            .1
+            .short_name
+            .to_string();
 
         event_db.remove_tag(short_name.to_string()).unwrap();
     }
@@ -588,8 +625,10 @@ mod tests {
         {
             let time = time_now + 10;
             let description = "This event should have no tags";
-            event_db.add_tag("This tag should be removed", "rmv");
-            event_db.add_event(time, description, &["rmv"]);
+            event_db
+                .add_tag("This tag should be removed", "rmv")
+                .unwrap();
+            event_db.add_event(time, description, &["rmv"]).unwrap();
             assert!(
                 event_db.remove_tag("rmv".to_string()).is_ok(),
                 "Could not remove a tag"
@@ -608,8 +647,7 @@ mod tests {
                 time_now,
                 "This event should be overwritten",
                 &["zro", "frs", "scn"],
-            )
-            .unwrap();
+            ).unwrap();
 
         // Overwriting an existing event.
         event_db
