@@ -66,26 +66,24 @@ impl EventId {
     fn to_timestamp(&self, event_db: &EventDb) -> Option<i64> {
         match self {
             EventId::Timestamp(t) => Some(*t),
-            EventId::Position(pos) => {
-                event_db.events
-                    .iter()
-                    .rev()
-                    .nth(*pos)
-                    .map(|(time, _event)| *time)
-            }
+            EventId::Position(pos) => event_db
+                .events
+                .iter()
+                .rev()
+                .nth(*pos)
+                .map(|(time, _event)| *time),
         }
     }
 
     fn to_position(&self, event_db: &EventDb) -> Option<usize> {
         match self {
-            EventId::Timestamp(t) => {
-                event_db.events
-                    .iter()
-                    .rev()
-                    .enumerate()
-                    .find(|(_, (time, _event))| t == *time)
-                    .map(|(i, (_, _)) | i)
-            }
+            EventId::Timestamp(t) => event_db
+                .events
+                .iter()
+                .rev()
+                .enumerate()
+                .find(|(_, (time, _event))| t == *time)
+                .map(|(i, (_, _))| i),
             EventId::Position(pos) => Some(*pos),
         }
     }
@@ -205,6 +203,7 @@ impl EventDb {
         Ok(())
     }
 
+    /// Removes and returns the `Event` identified by the given `EventId`.
     pub fn remove_event(&mut self, event_id: &EventId) -> Option<Event> {
         let timestamp = event_id.to_timestamp(&self);
 
@@ -215,16 +214,13 @@ impl EventDb {
         }
     }
 
-    pub fn remove_event_time(&mut self, time: i64) -> Option<Event> {
-        self.events.remove(&time)
-    }
-
+    /// Returns an iterator over the `EventDb`'s `Tag`s.
     pub fn tags_iter(&self) -> std::collections::hash_map::Iter<u16, Tag> {
         self.tags.iter()
     }
 
-    /// Takes a start and end date and returns a vector of information about
-    /// the events on and between those dates.
+    /// Takes a start `DateTime<Local>` and an end `DateTime<Local>` and returns a `Vec<LogEvent>`
+    /// containing all `LogEvent`s between those two `DateTime<Local>`s.
     pub fn get_log_between_times(
         &self,
         time_start: &chrono::DateTime<Local>,
@@ -300,10 +296,6 @@ impl EventDb {
             Some(timestamp) => Some(self.events.get_mut(&timestamp).unwrap()),
             None => None,
         }
-    }
-
-    pub fn get_event_time(&self, time: i64) -> Option<&Event> {
-        self.events.get(&time)
     }
 
     pub fn add_tags_for_event(
@@ -462,7 +454,6 @@ impl EventDb {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -569,7 +560,8 @@ mod tests {
             .nth(rng.gen_range(0, tag_count))
             .expect("Could not find a tag at the given id")
             .1
-            .short_name.to_owned();
+            .short_name
+            .to_owned();
 
         event_db.remove_tag(&short_name).unwrap();
     }
@@ -601,12 +593,9 @@ mod tests {
                 .add_tag("This tag should be removed", "rmv")
                 .unwrap();
             event_db.add_event(time, description, &["rmv"]).unwrap();
-            assert!(
-                event_db.remove_tag("rmv").is_ok(),
-                "Could not remove a tag"
-            );
+            assert!(event_db.remove_tag("rmv").is_ok(), "Could not remove a tag");
             assert_eq!(
-                *event_db.get_event_time(time).unwrap(),
+                *event_db.get_event(&EventId::Timestamp(time)).unwrap(),
                 Event {
                     description: description.to_string(),
                     tag_ids: vec![],
@@ -634,7 +623,11 @@ mod tests {
         event_db
             .add_event(time_now + 2, "This event should be removed", &[])
             .unwrap();
-        assert!(event_db.remove_event(&EventId::Timestamp(time_now + 2)).is_some());
+        assert!(
+            event_db
+                .remove_event(&EventId::Timestamp(time_now + 2))
+                .is_some()
+        );
 
         assert!(event_db.write(&file_name).is_ok());
 
