@@ -1,6 +1,4 @@
 
 /target
 **/*.rs.bk
-*.sublime-project
-*.sublime-workspace
 /test_files/read_write_test.json
