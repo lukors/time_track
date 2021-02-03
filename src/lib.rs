@@ -215,7 +215,8 @@ impl EventDb {
                     .filter(|(_, v)| v.short_name == *sn)
                     .map(|(k, _)| *k)
                     .collect::<Vec<u16>>()
-            }).collect();
+            })
+            .collect();
 
         let description = description.to_string();
         let event = Event {
@@ -268,7 +269,8 @@ impl EventDb {
                     .rev()
                     .position(|(t, _)| t == time)
                     .expect("Could not find an event at the given position"),
-            }).collect()
+            })
+            .collect()
     }
 
     /// Returns the `LogEvent` for the given `EventId`.
@@ -308,7 +310,7 @@ impl EventDb {
         let current_event_timestamp = event_id.to_timestamp(&self).unwrap();
         let current_event_position = event_id.to_position(&self).unwrap();
         let preceeding_event_position = EventId::Position(current_event_position + 1);
-        
+
         if let Some(preceeding_event_timestamp) = preceeding_event_position.to_timestamp(&self) {
             Some(current_event_timestamp - preceeding_event_timestamp)
         } else {
@@ -636,7 +638,8 @@ mod tests {
                 time_now,
                 "This event should be overwritten",
                 &["zro", "frs", "scn"],
-            ).unwrap();
+            )
+            .unwrap();
 
         // Overwriting an existing event.
         event_db
@@ -651,11 +654,9 @@ mod tests {
         event_db
             .add_event(time_now + 2, "This event should be removed", &[])
             .unwrap();
-        assert!(
-            event_db
-                .remove_event(&EventId::Timestamp(time_now + 2))
-                .is_some()
-        );
+        assert!(event_db
+            .remove_event(&EventId::Timestamp(time_now + 2))
+            .is_some());
 
         assert!(event_db.write(&file_name).is_ok());
 
