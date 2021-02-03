@@ -308,9 +308,12 @@ impl EventDb {
         let current_event_timestamp = event_id.to_timestamp(&self).unwrap();
         let current_event_position = event_id.to_position(&self).unwrap();
         let preceeding_event_position = EventId::Position(current_event_position + 1);
-        let preceeding_event_timestamp = preceeding_event_position.to_timestamp(&self).unwrap();
-
-        Some(current_event_timestamp - preceeding_event_timestamp)
+        
+        if let Some(preceeding_event_timestamp) = preceeding_event_position.to_timestamp(&self) {
+            Some(current_event_timestamp - preceeding_event_timestamp)
+        } else {
+            Some(0)
+        }
     }
 
     /// Returns a mutable reference to the `Event` identified by `EventId`.
