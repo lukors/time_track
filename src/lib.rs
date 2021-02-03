@@ -51,7 +51,7 @@ impl std::error::Error for EventDbError {
         &self.message
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         // Generic error, underlying cause isn't tracked.
         None
     }
@@ -207,7 +207,7 @@ impl EventDb {
             }
         }
 
-        let tag_ids: Vec<(_)> = short_names
+        let tag_ids: Vec<_> = short_names
             .iter()
             .flat_map(|sn| {
                 self.tags
@@ -455,7 +455,7 @@ impl EventDb {
             .collect();
 
         for time in affected_event_times {
-            let mut event = self.events.get_mut(&time).unwrap();
+            let event = self.events.get_mut(&time).unwrap();
             let mut index_to_remove: Option<u16> = None;
 
             for (i, tag_id) in event.tag_ids.iter().enumerate() {
