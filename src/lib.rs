@@ -182,7 +182,7 @@ impl EventDb {
         short_names: &[&str],
     ) -> Result<(), EventDbError> {
         let mut short_names = short_names.to_vec();
-        short_names.sort();
+        short_names.sort_unstable();
         short_names.dedup();
 
         {
@@ -340,7 +340,7 @@ impl EventDb {
         match self.get_event_mut(event_id) {
             Some(event) => {
                 event.tag_ids.append(&mut tag_ids);
-                event.tag_ids.sort();
+                event.tag_ids.sort_unstable();
                 event.tag_ids.dedup();
                 Ok(())
             }
@@ -406,7 +406,7 @@ impl EventDb {
         // Ignoring lint because this needs to be a two-step process, and the lint doesn't
         // understand that.
         #[allow(unknown_lints)]
-        #[allow(map_entry)]
+        #[allow(clippy::map_entry)]
         for number in 0.. {
             if !self.tags.contains_key(&number) {
                 self.tags.insert(
@@ -434,13 +434,13 @@ impl EventDb {
             }
         }
 
-        let id_to_remove = if id_to_remove.is_none() {
+        let id_to_remove = if let Some(id_to_remove) = id_to_remove {
+            id_to_remove
+        } else {
             return Err(EventDbError {
                 error_kind: ErrorKind::InvalidInput,
                 message: "That short name does not exist".to_string(),
             });
-        } else {
-            id_to_remove.unwrap()
         };
 
         self.tags.remove(&id_to_remove);
