@@ -13,7 +13,7 @@ extern crate rand;
 use chrono::prelude::*;
 use std::{
     cmp::{max, min},
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     error, fmt,
     fs::{self, File},
     io,
@@ -126,7 +126,7 @@ pub struct Tag {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct EventDb {
-    pub tags: HashMap<u16, Tag>,
+    pub tags: BTreeMap<u16, Tag>,
     pub events: BTreeMap<i64, Event>,
 }
 
@@ -141,7 +141,7 @@ pub struct LogEvent {
 impl EventDb {
     fn new() -> EventDb {
         EventDb {
-            tags: HashMap::new(),
+            tags: BTreeMap::new(),
             events: BTreeMap::new(),
         }
     }
@@ -236,11 +236,6 @@ impl EventDb {
         } else {
             None
         }
-    }
-
-    /// Returns an iterator over the `EventDb`'s `Tag`s.
-    pub fn tags_iter(&self) -> std::collections::hash_map::Iter<u16, Tag> {
-        self.tags.iter()
     }
 
     /// Takes a start `DateTime<Local>` and an end `DateTime<Local>` and returns a `Vec<LogEvent>`
@@ -430,29 +425,31 @@ impl EventDb {
 
     pub fn remove_tag(&mut self, short_name: &str) -> Result<(), EventDbError> {
         // Remove the tag from the database
-        let key_to_remove: Vec<u16> = self
-            .tags
-            .iter()
-            .filter(|&(_, ref val)| val.short_name == short_name)
-            .map(|(key, _)| *key)
-            .collect();
+        let mut id_to_remove: Option<u16> = None;
 
-        if key_to_remove.is_empty() {
+        for (id, tag) in &self.tags {
+            if tag.short_name == short_name {
+                id_to_remove = Some(*id);
+                break;
+            }
+        }
+
+        let id_to_remove = if id_to_remove.is_none() {
             return Err(EventDbError {
                 error_kind: ErrorKind::InvalidInput,
                 message: "That short name does not exist".to_string(),
             });
-        }
+        } else {
+            id_to_remove.unwrap()
+        };
 
-        let key_to_remove = key_to_remove.first().unwrap();
-
-        self.tags.remove(key_to_remove);
+        self.tags.remove(&id_to_remove);
 
         // Remove the tag from all events where it's used.
         let affected_event_times: Vec<i64> = self
             .events
             .iter()
-            .filter(|(_, e)| e.tag_ids.contains(key_to_remove))
+            .filter(|(_, e)| e.tag_ids.contains(&id_to_remove))
             .map(|(t, _)| *t)
             .collect();
 
@@ -461,7 +458,7 @@ impl EventDb {
             let mut index_to_remove: Option<u16> = None;
 
             for (i, tag_id) in event.tag_ids.iter().enumerate() {
-                if tag_id == key_to_remove {
+                if *tag_id == id_to_remove {
                     index_to_remove = Some(i as u16);
                     break;
                 }
@@ -563,33 +560,35 @@ mod tests {
     }
 
     fn get_random_short_name(rng: &mut rand::ThreadRng, event_db: &EventDb) -> Option<String> {
-        let tag_count = event_db.tags_iter().count();
+        let tag_count = event_db.tags.keys().count();
 
         if tag_count == 0 {
             return None;
         }
 
-        let short_name = event_db.tags_iter().nth(rng.gen_range(0, tag_count));
+        let tag = event_db.tags.values().nth(rng.gen_range(0, tag_count));
 
-        if short_name.is_none() {
+        if tag.is_none() {
             None
         } else {
-            Some(short_name.unwrap().1.short_name.to_string())
+            Some(tag.unwrap().short_name.to_string())
         }
     }
 
     fn qc_remove_tag(rng: &mut rand::ThreadRng, event_db: &mut EventDb) {
-        let tag_count = event_db.tags_iter().count();
+        let tag_count = event_db.tags.len();
 
         if tag_count == 0 {
             return;
         }
 
+        dbg!(tag_count);
+
         let short_name = event_db
-            .tags_iter()
+            .tags
+            .values()
             .nth(rng.gen_range(0, tag_count))
-            .expect("Could not find a tag at the given id")
-            .1
+            .unwrap()
             .short_name
             .to_owned();
 
