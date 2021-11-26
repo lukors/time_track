@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2021-11-25
+### Changed
+- Each even can now have only one tag at most.
+
 ## [0.2.0] - 2021-02-08
 ### Changed
 - Tags in the database are now always in the same order.

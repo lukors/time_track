@@ -1,15 +1,11 @@
 [package]
 name = "time_track"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Lukas Orsvärn <lukas@orsvarn.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 chrono = "0.4"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-
-[dev-dependencies]
-quickcheck = "0.7"
-rand = "0.5"
