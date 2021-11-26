@@ -6,9 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.0] - 2021-11-25
+## [0.3.0] - 2021-11-26
 ### Changed
 - Each even can now have only one tag at most.
+- Renamed many things to simplify the metaphors.
 
 ## [0.2.0] - 2021-02-08
 ### Changed
