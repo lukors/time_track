@@ -399,6 +399,10 @@ impl CheckpointDb {
     }
 
     pub fn project_id_from_short_name(&self, short_name: &str) -> Option<ProjectId> {
+        if short_name.is_empty() {
+            return Some(ProjectId::NoId);
+        }
+
         self.projects
             .iter()
             .filter(|&(_, val)| val.short_name == short_name)
