@@ -5,7 +5,15 @@ extern crate serde;
 extern crate serde_json;
 
 use chrono::prelude::*;
-use std::{cmp::{max, min}, collections::BTreeMap, error, fmt::{self, Display}, fs::{self, File}, io, path::Path};
+use std::{
+    cmp::{max, min},
+    collections::BTreeMap,
+    error,
+    fmt::{self, Display},
+    fs::{self, File},
+    io,
+    path::Path,
+};
 
 #[derive(Clone)]
 pub struct CheckpointDbError {
@@ -267,9 +275,12 @@ impl CheckpointDb {
 
         let current_checkpoint_timestamp = checkpoint_id.to_timestamp(self).unwrap();
         let current_checkpoint_position = checkpoint_id.to_position(self).unwrap();
-        let preceeding_checkpoint_position = CheckpointId::Position(current_checkpoint_position + 1);
+        let preceeding_checkpoint_position =
+            CheckpointId::Position(current_checkpoint_position + 1);
 
-        if let Some(preceeding_checkpoint_timestamp) = preceeding_checkpoint_position.to_timestamp(self) {
+        if let Some(preceeding_checkpoint_timestamp) =
+            preceeding_checkpoint_position.to_timestamp(self)
+        {
             Some(current_checkpoint_timestamp - preceeding_checkpoint_timestamp)
         } else {
             Some(0)
@@ -284,7 +295,11 @@ impl CheckpointDb {
         }
     }
 
-    pub fn set_checkpoint_project(&mut self, checkpoint_id: CheckpointId, project_id: ProjectId) -> Result<(), CheckpointDbError> {
+    pub fn set_checkpoint_project(
+        &mut self,
+        checkpoint_id: CheckpointId,
+        project_id: ProjectId,
+    ) -> Result<(), CheckpointDbError> {
         if let ProjectId::Id(project_id) = project_id {
             if !self.projects.contains_key(&project_id) {
                 return Err(CheckpointDbError {
@@ -305,7 +320,11 @@ impl CheckpointDb {
         }
     }
 
-    pub fn add_project(&mut self, long_name: &str, short_name: &str) -> Result<ProjectId, CheckpointDbError> {
+    pub fn add_project(
+        &mut self,
+        long_name: &str,
+        short_name: &str,
+    ) -> Result<ProjectId, CheckpointDbError> {
         let short_name = short_name.to_string();
         let long_name = long_name.to_string();
 
@@ -422,19 +441,21 @@ mod tests {
         // Removing a project should work.
         {
             let time = time_now + 10;
-            let description = "This checkpoint should have no projects";
+            let message = "This checkpoint should have no projects";
             let rmv_id = checkpoint_db
                 .add_project("This project should be removed", "rmv")
                 .unwrap();
-            checkpoint_db.add_checkpoint(time, description, rmv_id).unwrap();
+            checkpoint_db.add_checkpoint(time, message, rmv_id).unwrap();
             assert!(
                 checkpoint_db.remove_project(rmv_id).is_ok(),
                 "Could not remove a project"
             );
             assert_eq!(
-                *checkpoint_db.get_checkpoint(&CheckpointId::Timestamp(time)).unwrap(),
+                *checkpoint_db
+                    .get_checkpoint(&CheckpointId::Timestamp(time))
+                    .unwrap(),
                 Checkpoint {
-                    message: description.to_string(),
+                    message: message.to_string(),
                     project_id: ProjectId::NoId,
                 }
             );
@@ -446,12 +467,16 @@ mod tests {
 
         // Overwriting an existing checkpoint.
         checkpoint_db
-            .add_checkpoint(time_now + 1, "This is a description", scn_id)
+            .add_checkpoint(time_now + 1, "This is a message", scn_id)
             .unwrap();
 
         // Adding and then removing an checkpoint.
         checkpoint_db
-            .add_checkpoint(time_now + 2, "This checkpoint should be removed", ProjectId::NoId)
+            .add_checkpoint(
+                time_now + 2,
+                "This checkpoint should be removed",
+                ProjectId::NoId,
+            )
             .unwrap();
         assert!(checkpoint_db
             .remove_checkpoint(&CheckpointId::Timestamp(time_now + 2))
